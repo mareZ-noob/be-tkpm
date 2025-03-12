@@ -1,0 +1,17 @@
+[flake8]
+max-line-length = 120
+import-order-style = pycharm
+ignore=E402
+per-file-ignores =
+    # F401: unused imports, ignore in all __init__.py
+    # F403: import *
+    __init__.py: F401,F403
+    # F405: name comes from import *
+    # E501: line too long
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    .tox
+    migrations,
+    .vscode,
