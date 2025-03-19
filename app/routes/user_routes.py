@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.controllers.user_controller import add_user, get_users
+from app.middlewares.auth_middleware import token_required  # 📌 Import middleware xác thực
 
 user_bp = Blueprint('user', __name__, url_prefix='/users')
 
@@ -40,3 +41,9 @@ def create_user():
         return jsonify({"error": "User already exists"}), 400
 
     return jsonify(user.to_dict()), 201
+
+
+@user_bp.route('/profile', methods=['GET'])
+@token_required
+def get_profile(user):
+    return jsonify(user.to_dict()), 200

@@ -11,18 +11,19 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(256), nullable=False)
-    first_name = db.Column(db.String(100), nullable=False)
-    last_name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False)
+    first_name = db.Column(db.String(100), nullable=True)
+    last_name = db.Column(db.String(100), nullable=True)
+    email = db.Column(db.String(100), unique=True, nullable=False)  
+    gender = db.Column(db.String(100), unique=False, nullable=True)
     date_of_birth = db.Column(db.Date)
     description = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    created_at = db.Column(db.DateTime(timezone=True), default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now(), default=func.now())
     is_active = db.Column(db.Boolean, default=True)
 
     resources = relationship('Resource', back_populates='user')
 
-    def __init__(self, username, first_name, last_name, email, password=None, date_of_birth=None, description=None):
+    def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None, description=None):
         self.username = username
         self.password = password
         self.first_name = first_name

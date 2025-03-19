@@ -14,6 +14,7 @@ def get_user_by_id(user_id: int) -> Optional[User]:
     return User.query.get(user_id)
 
 
+
 def add_user(username: str, password: str, first_name: str, last_name: str, email: str,
              date_of_birth: Optional[str] = None, description: Optional[str] = None) -> Optional[User]:
     try:
