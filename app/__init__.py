@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask
 from flask_migrate import Migrate
+from flask_cors import CORS
 
 from app.models import db
 from app.routes import register_routes
@@ -38,5 +39,8 @@ def create_app():
 
     # Register all routes
     register_routes(app)
+    
+    #Allow for CORS requests from the frontend server
+    CORS(app, resources={r"/*": {"origins": "http://localhost:5174"}})
 
     return app

@@ -31,13 +31,10 @@ def login():
 def register():
     data = request.json
     
-    required_fields = ['username', 'email', 'password', 'confirm_password']
+    required_fields = ['username', 'email', 'password']
     
     if not all(field in data for field in required_fields):
         return jsonify({'error': 'Missing required fields'}), 400
-    
-    if data['password'] != data['confirm_password']:
-        return jsonify({'error': 'Passwords do not match'}), 400
     
     if User.query.filter_by(username=data['username']).first():
         return jsonify({'error': 'Username already exists'}), 400
