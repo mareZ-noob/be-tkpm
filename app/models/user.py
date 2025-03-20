@@ -13,7 +13,7 @@ class User(db.Model):
     password = db.Column(db.String(256), nullable=False)
     first_name = db.Column(db.String(100), nullable=True)
     last_name = db.Column(db.String(100), nullable=True)
-    email = db.Column(db.String(100), unique=True, nullable=False)  
+    email = db.Column(db.String(100), unique=True, nullable=False)
     gender = db.Column(db.String(100), unique=False, nullable=True)
     date_of_birth = db.Column(db.Date)
     description = db.Column(db.String(255))
@@ -23,7 +23,8 @@ class User(db.Model):
 
     resources = relationship('Resource', back_populates='user')
 
-    def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None, description=None):
+    def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None,
+                 description=None):
         self.username = username
         self.password = password
         self.first_name = first_name

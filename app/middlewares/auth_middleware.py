@@ -1,15 +1,20 @@
-﻿from flask import request, jsonify
-import jwt
+﻿# Not used
+
 from functools import wraps
+
+import jwt
+from flask import jsonify, request
+
 from app.models.user import User
 
 SECRET_KEY = 'secret'
+
 
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get("Authorization")
-        print(f"Token: {token}")  #Debug token
+        print(f"Token: {token}")  # Debug token
         if not token:
             return jsonify({"message": "Token is missing!"}), 401
 
@@ -21,9 +26,9 @@ def token_required(f):
         except jwt.ExpiredSignatureError:
             return jsonify({"message": "Token expired"}), 401
         except jwt.InvalidTokenError as e:
-            print(f"JWT Error: {str(e)}")  #Debug lỗi
+            print(f"JWT Error: {str(e)}")  # Debug lỗi
             return jsonify({"message": "Invalid token"}), 401
 
         return f(user, *args, **kwargs)
+
     return decorated
-# Test trong POSTMAN nhập heading Authorization với value là token 

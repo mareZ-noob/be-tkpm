@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.controllers.user_controller import add_user, get_users
-from app.middlewares.auth_middleware import token_required  # 📌 Import middleware xác thực
+from app.models import User
 
 user_bp = Blueprint('user', __name__, url_prefix='/users')
 
@@ -44,6 +45,8 @@ def create_user():
 
 
 @user_bp.route('/profile', methods=['GET'])
-@token_required
-def get_profile(user):
+@jwt_required()
+def get_profile():
+    current_user = get_jwt_identity()
+    user = User.query.get(current_user)
     return jsonify(user.to_dict()), 200
