@@ -22,6 +22,8 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, default=True)
 
     resources = relationship('Resource', back_populates='user')
+    documents = relationship('Document', back_populates='user', cascade="all, delete-orphan")
+
 
     def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None, description=None):
         self.username = username
