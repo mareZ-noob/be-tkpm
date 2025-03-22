@@ -1,8 +1,8 @@
-"""init migration
+"""Initial migration
 
-Revision ID: 5057a11dc572
+Revision ID: 6607b8155fcd
 Revises: 
-Create Date: 2025-03-12 15:33:53.521833
+Create Date: 2025-03-22 22:28:29.969983
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '5057a11dc572'
+revision = '6607b8155fcd'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -22,12 +22,13 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('username', sa.String(length=100), nullable=False),
     sa.Column('password', sa.String(length=256), nullable=False),
-    sa.Column('first_name', sa.String(length=100), nullable=False),
-    sa.Column('last_name', sa.String(length=100), nullable=False),
+    sa.Column('first_name', sa.String(length=100), nullable=True),
+    sa.Column('last_name', sa.String(length=100), nullable=True),
     sa.Column('email', sa.String(length=100), nullable=False),
+    sa.Column('gender', sa.String(length=100), nullable=True),
     sa.Column('date_of_birth', sa.Date(), nullable=True),
     sa.Column('description', sa.String(length=255), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.PrimaryKeyConstraint('id'),

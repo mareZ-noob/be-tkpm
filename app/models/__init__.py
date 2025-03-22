@@ -4,3 +4,4 @@ db = SQLAlchemy()
 
 from .resource import Resource
 from .user import User
+from .document import Document
