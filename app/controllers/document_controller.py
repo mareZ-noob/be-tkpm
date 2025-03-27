@@ -1,8 +1,8 @@
-﻿
-from flask import jsonify, request
+﻿from flask import jsonify, request
+from flask_jwt_extended import jwt_required
 from app.models.document import Document, db
 
-
+@jwt_required()
 def create_document():
     data = request.get_json()
     user_id = data.get('userId')
@@ -17,6 +17,7 @@ def create_document():
 
     return jsonify(new_doc.to_dict()), 201
 
+@jwt_required()
 def update_document(document_id):
     document = Document.query.get(document_id)
     if not document:
@@ -28,6 +29,7 @@ def update_document(document_id):
 
     return jsonify(document.to_dict())
 
+@jwt_required
 def delete_document(document_id):
     document = Document.query.get(document_id)
     if not document:
@@ -38,6 +40,7 @@ def delete_document(document_id):
 
     return jsonify({"message": "Document deleted"}), 200
 
+@jwt_required()
 def get_user_documents(user_id):
     documents = Document.query.filter_by(userId=user_id).all()
     return jsonify([doc.to_dict() for doc in documents])
