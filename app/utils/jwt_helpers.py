@@ -6,8 +6,6 @@ revoked_store = set()
 jwt = JWTManager()
 
 
-# Token blocklist checking function
 @jwt.token_in_blocklist_loader
-def check_if_token_in_blocklist(jwt_payload):
-    jti = jwt_payload["jti"]
-    return jti in revoked_store
+def check_if_token_in_blocklist(jwt_header, jwt_payload):
+    return jwt_payload["jti"] in revoked_store  # Kiểm tra token có bị block không
