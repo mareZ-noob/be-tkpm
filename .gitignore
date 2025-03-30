@@ -5,6 +5,7 @@
 *.cer
 *.der
 *.priv
+credentials.json
 
 ### venv template
 # Virtualenv
@@ -154,3 +155,6 @@ instance/*
 __pycache__/
 .pytest_cache/
 
+edgetts.txt
+test.py
+output.mp3

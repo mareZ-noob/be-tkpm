@@ -42,6 +42,9 @@ def create_app():
     app.config['FLASK_RUN_HOST'] = os.getenv("FLASK_RUN_HOST", "127.0.0.1")
     app.config['FLASK_RUN_PORT'] = int(os.getenv("FLASK_RUN_PORT", 5000))
 
+    if os.getenv('GEMINI_API_KEY') is None or os.getenv('GEMINI_API_KEY') == "":
+        raise ValueError("GEMINI_API_KEY is not set")
+
     # Initialize SQLAlchemy
     db.init_app(app)
 
