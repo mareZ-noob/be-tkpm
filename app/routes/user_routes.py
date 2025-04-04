@@ -1,52 +1,9 @@
-from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask import Blueprint
 
-from app.controllers.user_controller import add_user, get_users
-from app.models import User
+from app.controllers.user_controller import get_profile, get_users, update_profile
 
 user_bp = Blueprint('user', __name__, url_prefix='/users')
 
-
-@user_bp.route('/', methods=['GET'])
-def list_users():
-    users = get_users()
-    return jsonify([{"id": u.id, "username": u.username, "email": u.email} for u in users])
-
-
-@user_bp.route('/', methods=['POST'])
-def create_user():
-    data = request.get_json()
-
-    username = data.get('username')
-    password = data.get('password')
-    first_name = data.get('first_name')
-    last_name = data.get('last_name')
-    email = data.get('email')
-    date_of_birth = data.get('date_of_birth', None)  # Default to None if missing
-    description = data.get('description', '')
-
-    if not username or not password or not first_name or not last_name or not email:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    user = add_user(
-        username=username,
-        password=password,
-        first_name=first_name,
-        last_name=last_name,
-        email=email,
-        date_of_birth=date_of_birth,
-        description=description
-    )
-
-    if not user:
-        return jsonify({"error": "User already exists"}), 400
-
-    return jsonify(user.to_dict()), 201
-
-
-@user_bp.route('/profile', methods=['GET'])
-@jwt_required()
-def get_profile():
-    current_user = get_jwt_identity()
-    user = User.query.get(current_user)
-    return jsonify(user.to_dict()), 200
+user_bp.route('/', methods=['GET'])(get_users)
+user_bp.route('/profile', methods=['GET'])(get_profile)
+user_bp.route('/profile', methods=['PUT'])(update_profile)

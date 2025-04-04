@@ -1,64 +1,69 @@
-import datetime
 import os
 
 from dotenv import load_dotenv
 from flask import Flask
-from flask_cors import CORS
-from flask_migrate import Migrate
 
-from app.models import db
+from app.config.extensions import celery, cors, db, jwt, limiter, mail, migrate
+from app.config.settings import config
 from app.routes import register_routes
-from app.utils.jwt_helpers import jwt
+from app.utils.error_handlers import register_error_handlers
+from app.utils.request_handlers import cleanup_tts_files
 
-# Load environment variables from .env file
 load_dotenv()
 
 
-def create_app():
+def create_app(config_name=None):
+    if config_name is None:
+        config_name = os.getenv('FLASK_ENV', 'default')
+
     app = Flask(__name__)
-    app.config['SQLALCHEMY_DATABASE_URI'] = (
-        f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}"
-        f"@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
-    )
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret')
+    app.config.from_object(config[config_name])
 
-    if os.getenv('FLASK_ENV') == 'production':
-        app.config['DEBUG'] = False
-        app.config['SQLALCHEMY_ECHO'] = False
-    else:
-        app.config['DEBUG'] = True
-        app.config['SQLALCHEMY_ECHO'] = True
-
-    # JWT Configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(minutes=15)
-    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = datetime.timedelta(days=30)
-    app.config['JWT_TOKEN_LOCATION'] = ['cookies', 'headers']
-    app.config['JWT_COOKIE_SECURE'] = False  # Use True in production with HTTPS
-    app.config['JWT_COOKIE_SAMESITE'] = 'Strict'
-    app.config['JWT_REFRESH_COOKIE_PATH'] = '/'
-    app.config['JWT_COOKIE_CSRF_PROTECT'] = False
-
-    app.config['FLASK_RUN_HOST'] = os.getenv("FLASK_RUN_HOST", "127.0.0.1")
-    app.config['FLASK_RUN_PORT'] = int(os.getenv("FLASK_RUN_PORT", 5000))
-
+    # Check required environment variables
     if os.getenv('GEMINI_API_KEY') is None or os.getenv('GEMINI_API_KEY') == "":
         raise ValueError("GEMINI_API_KEY is not set")
+
+    if os.getenv('MAIL_USERNAME') is None or os.getenv('MAIL_USERNAME') == "":
+        raise ValueError("MAIL_USERNAME is not set")
+
+    if os.getenv('MAIL_PASSWORD') is None or os.getenv('MAIL_PASSWORD') == "":
+        raise ValueError("MAIL_PASSWORD is not set")
 
     # Initialize SQLAlchemy
     db.init_app(app)
 
+    # Initialize Celery
+    celery.conf.update(app.config)
+
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery.Task = ContextTask
+
     # Initialize JWT
     jwt.init_app(app)
 
+    # Initialize Limiter
+    limiter.init_app(app)
+
     # Initialize Migrate
-    migrate = Migrate(app, db)
     migrate.init_app(app, db)
+
+    # Initialize Mail
+    mail.init_app(app)
 
     # Register all routes
     register_routes(app)
 
+    # Register the after_request handler
+    app.after_request(cleanup_tts_files)
+
+    # Register error handlers
+    register_error_handlers(app)
+
     # Allow for CORS requests from the frontend server
-    CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+    cors.init_app(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
     return app

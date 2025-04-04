@@ -9,12 +9,13 @@
 ## Installation
 ### Prerequisites
 - Python 3.10.12
+- Redis
 
 ### Setup
 1. Clone the repository
     ```bash
-    git clone 
-    cd 
+    git clone https://github.com/mareZ-noob/be-tkpm.git
+    cd be-tkpm
     ```
 2. Create a virtual environment and activate it:
     ```bash
@@ -38,6 +39,27 @@
    POSTGRES_USER=admin
    POSTGRES_PASSWORD=admin
    POSTGRES_DB=tkpm
+   
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+   
+   MAIL_SERVER=smtp.gmail.com
+   MAIL_PORT=587
+   MAIL_USERNAME=
+   MAIL_PASSWORD=
+   
+   GEMINI_API_KEY=
+   OPEN_ROUTER_API_KEY=
+   ASSEMBLY_AI_API_KEY=
+   TIKTOK_SESSION_ID=
+   PEXELS_API_KEY=
+   
+   CLOUDINARY_CLOUD_NAME=
+   CLOUDINARY_API_KEY=
+   CLOUDINARY_API_SECRET=
+   CLOUDINARY_URL=
+   
+   FRONTEND_URL=http://localhost:5173
     ```
 ## Usage
 ### First time setup to create the database
@@ -56,6 +78,7 @@ flask db upgrade
 ```bash
 ./start.sh  # If you want to use Docker Compose
 # Or 
+celery -A celery_worker.celery worker --loglevel=info # Start the Celery worker
 python3 run.py  # On Windows use `python` instead of `python3`
 ```
 ### Format the code

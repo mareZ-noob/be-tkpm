@@ -1,26 +1,35 @@
-import logging
-from flask import jsonify, request
+from datetime import datetime, timezone
+
+from flask import current_app, jsonify, request
 from flask_jwt_extended import (
-    create_access_token, create_refresh_token, decode_token,
-    get_jwt_identity, jwt_required, unset_jwt_cookies
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    get_jwt_identity,
+    jwt_required,
+    unset_jwt_cookies,
 )
-from app.models.user import User, db
-from app.utils.jwt_helpers import revoked_store  # Import hệ thống lưu JTI bị thu hồi
+
+from app.config.extensions import db, limiter
+from app.models.reset_password_token import ResetPasswordToken
+from app.models.user import User
+from app.utils.email_utils import send_email
+from app.utils.exceptions import InvalidCredentialsException
+from app.utils.jwt_helpers import revoked_store
+
 
 def login():
     data = request.json
     required_fields = ['username', 'password']
     if not all(field in data for field in required_fields):
-        return jsonify({'error': 'Missing required fields'}), 400
+        return jsonify({'msg': 'Missing required fields'}), 400
 
     user = User.query.filter_by(username=data['username']).first()
     if not user or not user.check_password(data['password']):
-        return jsonify({'error': 'Invalid username or password'}), 401
+        raise InvalidCredentialsException("Invalid username or password")
 
     access_token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
-    logging.info("Access token: %s", access_token)
-    logging.info("Refresh token: %s", refresh_token)
 
     response = jsonify({
         "user": user.to_dict(),
@@ -43,20 +52,20 @@ def register():
     required_fields = ['username', 'email', 'password']
 
     if not all(field in data for field in required_fields):
-        return jsonify({'error': 'Missing required fields'}), 400
+        return jsonify({'msg': 'Missing required fields'}), 400
 
     if User.query.filter_by(username=data['username']).first():
-        return jsonify({'error': 'Username already exists'}), 400
+        return jsonify({'msg': 'Username already exists'}), 400
 
     if User.query.filter_by(email=data['email']).first():
-        return jsonify({'error': 'Email already exists'}), 400
+        return jsonify({'msg': 'Email already exists'}), 400
 
     user = User(
         username=data['username'],
         email=data['email'],
         password=data['password']
     )
-    user.hash_password(data['password'])  # Mã hóa mật khẩu
+    user.hash_password(data['password'])
 
     db.session.add(user)
     db.session.commit()
@@ -76,16 +85,134 @@ def refresh():
 def logout():
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Missing access token"}), 401
+        return jsonify({"msg": "Missing access token"}), 401
 
     access_token = auth_header.split(" ")[1]
     try:
         decoded_token = decode_token(access_token)
         jti = decoded_token["jti"]
     except Exception:
-        return jsonify({"error": "Invalid access token"}), 401
+        return jsonify({"msg": "Invalid access token"}), 401
 
     revoked_store.add(jti)
-    response = jsonify({"message": "Logged out"})
+    response = jsonify({"msg": "Logged out"})
     unset_jwt_cookies(response)
     return response, 200
+
+
+def get_email_key():
+    data = request.get_json()
+    return data.get('email', 'anonymous')
+
+
+@limiter.limit("3 per hour", key_func=get_email_key)
+def forgot_password():
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({'msg': 'Email is required'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'msg': 'User not found'}), 404
+
+    token = ResetPasswordToken.create_reset_password_token(user.id)
+
+    reset_token = ResetPasswordToken(user_id=user.id, token=token)
+    db.session.add(reset_token)
+    db.session.commit()
+
+    frontend_url = current_app.config.get('FRONTEND_URL', 'http://localhost:5173')
+    url = f"{frontend_url}/reset-password?token={token}"
+    subject = "Password Reset Request - saikou"
+
+    body = f"""Dear User,
+
+    We have received a request to reset your password for your saikou account. 
+    To proceed with resetting your password, please click the link below:
+
+    {url}
+
+    This link will expire in 1 hour for security purposes. If you did not request a password reset, 
+    please disregard this email or contact our support team at saikou@gmail.com.
+
+    Thank you,
+    The saikou Team
+    """
+
+    # HTML version for better formatting
+    html = f"""<!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            .container {{ max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }}
+            .header {{ color: #333; padding: 20px 0; }}
+            .content {{ line-height: 1.6; color: #444; }}
+            .button {{ 
+                background-color: #007bff; 
+                color: white; 
+                padding: 10px 20px; 
+                text-decoration: none; 
+                border-radius: 5px; 
+                display: inline-block;
+            }}
+            .footer {{ font-size: 12px; color: #777; margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>Password Reset Request</h2>
+            </div>
+            <div class="content">
+                <p>Dear User,</p>
+                <p>We have received a request to reset your password for your saikou account. To proceed with resetting your password, please click the button below:</p>
+                <p>
+                    <a href="{url}" class="button">Reset Password</a>
+                </p>
+                <p>This link will expire in 1 hour for security purposes. If you did not request a password reset, please disregard this email or contact our support team at <a href="mailto:saikou@gmail.com">saikou@gmail.com</a>.</p>
+                <p>Thank you,<br>The saikou Team</p>
+            </div>
+            <div class="footer">
+                <p>&copy; {datetime.now().year} saikou. All rights reserved.</p>
+                <p>227 Nguyen Van Cu | 0923820719</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    send_email(subject=subject, recipients=[email], body=body, html=html)
+
+    return jsonify({'msg': 'Password reset email sent'}), 200
+
+
+def reset_password():
+    data = request.get_json()
+    token = data.get('token')
+    new_password = data.get('new_password')
+
+    if not token or not new_password:
+        return jsonify({'msg': 'Token and new password are required'}), 400
+
+    reset_token = ResetPasswordToken.query.filter_by(token=token).first()
+    if not reset_token:
+        return jsonify({'msg': 'Invalid token'}), 400
+
+    if reset_token.expired_at < datetime.now(timezone.utc):
+        db.session.delete(reset_token)
+        db.session.commit()
+        return jsonify({'msg': 'Token has expired'}), 400
+
+    user = User.query.get(reset_token.user_id)
+    if not user:
+        return jsonify({'msg': 'User not found'}), 404
+
+    user.hash_password(new_password)
+    db.session.commit()
+
+    db.session.delete(reset_token)
+    db.session.commit()
+
+    return jsonify({'msg': 'Password reset successfully'}), 200

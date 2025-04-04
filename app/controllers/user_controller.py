@@ -1,77 +1,66 @@
-import logging
-from typing import List, Optional
-
+from flask import jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.user import User, db
+from app.config.extensions import db
+from app.models.user import User
 
 
-def get_users() -> List[User]:
-    return User.query.all()
+@jwt_required()
+def get_users():
+    users = User.query.all()
+    return jsonify({"users": [user.to_dict() for user in users]}), 200
 
 
-def get_user_by_id(user_id: int) -> Optional[User]:
-    return User.query.get(user_id)
+@jwt_required()
+def get_profile():
+    current_user = get_jwt_identity()
+    user = User.query.get(current_user)
+    return jsonify(user.to_dict()), 200
 
 
-def add_user(username: str, password: str, first_name: str, last_name: str, email: str,
-             date_of_birth: Optional[str] = None, description: Optional[str] = None) -> Optional[User]:
-    try:
-        if User.query.filter_by(email=email).first():
-            logging.basicConfig(level=logging.DEBUG,
-                                format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
-            logging.error(f'User with email {email} already exists')
-            return None
+@jwt_required()
+def update_profile():
+    current_user = get_jwt_identity()
+    if not current_user:
+        return jsonify({"msg": "User not found"}), 404
 
-        if User.query.filter_by(username=username).first():
-            logging.error(f'User with username {username} already exists')
-            return None
+    user = User.query.get(current_user)
 
-        user = User(
-            username=username,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-        )
-        user.hash_password(password)
-        if date_of_birth:
-            user.date_of_birth = date_of_birth
-        if description:
-            user.description = description
-        db.session.add(user)
-        db.session.commit()
-        return user
-    except SQLAlchemyError as e:
-        db.session.rollback()
-        logging.error(f"Error adding user: {e}")
-        return None
-
-
-def update_user(user_id: int, **kwargs) -> Optional[User]:
-    user = get_user_by_id(user_id)
     if not user:
-        return None
+        return jsonify({"msg": "User not found"}), 404
+
+    data = request.get_json()
+
+    first_name = data.get('first_name', '')
+    last_name = data.get('last_name', '')
+    date_of_birth = data.get('date_of_birth', '')
+    description = data.get('description', '')
+
     try:
-        for key, value in kwargs.items():
-            if hasattr(user, key):
-                setattr(user, key, value)
+        user.first_name = first_name
+        user.last_name = last_name
+        user.date_of_birth = date_of_birth
+        user.description = description
+
         db.session.commit()
-        return user
-    except SQLAlchemyError as e:
+        return jsonify(user.to_dict()), 200
+    except SQLAlchemyError:
         db.session.rollback()
-        logging.error(f"Error updating user: {e}")
-        return None
+        return jsonify({"msg": "Error updating user"}), 500
 
 
-def delete_user(user_id: int) -> bool:
-    user = get_user_by_id(user_id)
-    if not user:
-        return False
+@jwt_required()
+def delete_user():
+    current_user = get_jwt_identity()
+    if not current_user:
+        return jsonify({"msg": "User ID not provided"}), 400
+    user = User.query.get(current_user)
+
     try:
         db.session.delete(user)
         db.session.commit()
-        return True
-    except SQLAlchemyError as e:
+        return jsonify({"msg": "User deleted successfully"}), 200
+    except SQLAlchemyError:
         db.session.rollback()
-        logging.error(f"Error deleting user: {e}")
-        return False
+        return jsonify({"msg": "Error deleting user"}), 500

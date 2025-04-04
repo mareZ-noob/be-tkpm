@@ -7,7 +7,6 @@ from uuid import uuid4
 import requests
 from moviepy.audio.AudioClip import concatenate_audioclips
 from moviepy.editor import AudioFileClip
-from playsound import playsound
 
 ENDPOINTS = [
     "https://tiktok-tts.weilnet.workers.dev/api/generation",
@@ -18,7 +17,6 @@ TEXT_BYTE_LIMIT = 100
 
 
 def split_string(string: str, chunk_size: int) -> List[str]:
-    print(len(string))
     if len(string) <= chunk_size:
         return [string]
 
@@ -93,9 +91,9 @@ def split_string(string: str, chunk_size: int) -> List[str]:
             result.append(chunk.strip())
             remaining_text = remaining_text[chunk_size:].strip()
 
-    for i, r in enumerate(result):
-        print(r)
-        print('------------------------------')
+    # for i, r in enumerate(result):
+    #     print(r)
+    #     print('------------------------------')
 
     return result
 
@@ -106,7 +104,7 @@ def get_api_response() -> requests.Response:
     return response
 
 
-def save_audio_file(base64_data: str, filename: str) -> None:
+def save_audio_file(base64_data: str, filename: str):
     audio_bytes = base64.b64decode(base64_data)
     with open(filename, "wb") as file:
         file.write(audio_bytes)
@@ -120,7 +118,7 @@ def generate_audio(text: str, voice: str) -> bytes:
     return response.content
 
 
-def tts(text: str, voice: str = "none", filename: str = "output.mp3", play_sound: bool = False) -> None:
+def tts(text: str, voice: str = "none", filename: str = "output.mp3"):
     # checking if the website is available
     global current_endpoint
 
@@ -139,10 +137,6 @@ def tts(text: str, voice: str = "none", filename: str = "output.mp3", play_sound
         print("[-] Please specify a voice", "red")
         return
 
-    # if voice not in VOICES:
-    #     print("[-] Voice not available", "red")
-    #     return
-
     if not text:
         print("[-] Please specify a text", "red")
         return
@@ -150,7 +144,7 @@ def tts(text: str, voice: str = "none", filename: str = "output.mp3", play_sound
     # creating the audio file
     try:
         if len(text) < TEXT_BYTE_LIMIT:
-            audio = generate_audio((text), voice)
+            audio = generate_audio(text, voice)
             if current_endpoint == 0:
                 audio_base64_data = str(audio).split('"')[5]
             else:
@@ -172,7 +166,6 @@ def tts(text: str, voice: str = "none", filename: str = "output.mp3", play_sound
                     base64_data = str(audio).split('"')[5]
                 else:
                     base64_data = str(audio).split('"')[3].split(",")[1]
-
                 if audio_base64_data == "error":
                     print("[-] This voice is unavailable right now", "red")
                     return "error"
@@ -197,8 +190,6 @@ def tts(text: str, voice: str = "none", filename: str = "output.mp3", play_sound
 
         save_audio_file(audio_base64_data, filename)
         print(f"[+] Audio file saved successfully as '{filename}'", "green")
-        if play_sound:
-            playsound(filename)
 
     except Exception as e:
         print(f"[-] An error occurred during TTS: {e}", "red")
@@ -232,14 +223,13 @@ sentences = [
     "Điều này chủ yếu là do sự chuẩn bị kỹ lưỡng trước đó, nhưng Y2K vẫn là một lời nhắc nhở về tầm quan trọng của việc dự đoán và giải quyết các vấn đề tiềm ẩn trong công nghệ thông tin, và là một ví dụ điển hình về một cuộc khủng hoảng kỹ thuật số được ngăn chặn thành công. "
     "Nỗi ám ảnh Y2K cũng đóng vai trò quan trọng trong việc thúc đẩy sự phát triển của các ngành công nghiệp công nghệ và củng cố nhận thức về an ninh mạng trong nhiều năm sau đó."
 ]
-
+#
 sentences = list(filter(lambda x: x != "", sentences))
 
 voice = [
-    "BV074_streaming",
     "BV075_streaming",
 ]
-
+#
 paths = []
 temp_audio_files = []
 for v in voice:
