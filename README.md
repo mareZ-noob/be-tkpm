@@ -53,6 +53,7 @@
    ASSEMBLY_AI_API_KEY=
    TIKTOK_SESSION_ID=
    PEXELS_API_KEY=
+   STABILITY_API_KEY=
    
    CLOUDINARY_CLOUD_NAME=
    CLOUDINARY_API_KEY=
@@ -78,7 +79,7 @@ flask db upgrade
 ```bash
 ./start.sh  # If you want to use Docker Compose
 # Or 
-celery -A celery_worker.celery worker --loglevel=info # Start the Celery worker
+celery -A celery_worker.celery worker --concurrency=4 --loglevel=info # Start the Celery worker
 python3 run.py  # On Windows use `python` instead of `python3`
 ```
 ### Format the code
