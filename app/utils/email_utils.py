@@ -26,17 +26,5 @@ from app.tasks.email_tasks import send_email_task
 
 
 def send_email(subject, recipients, body, html):
-    """
-    Queue an email to be sent asynchronously using Celery
-
-    Args:
-        subject (str): Email subject
-        recipients (list): List of recipient email addresses
-        body (str): Plain text email body
-        html (str): HTML email body
-
-    Returns:
-        celery.result.AsyncResult: Task result object
-    """
     task_result = send_email_task.delay(subject, recipients, body, html)
     return task_result

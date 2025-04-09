@@ -1,3 +1,4 @@
+-- Password: 123456
 INSERT INTO users (username, password, email, is_active)
 VALUES ('nam1',
         'scrypt:32768:8:1$ZyawvWtohChGsu65$412c5e23fce848312228098d83b6b74ef032fc8215cb8d9c79469fa3979143643838c4c402fcb2aeaef7ef436269ca575a52402584c2e0288d290e41dd8dcebd',
@@ -77,3 +78,12 @@ VALUES ('Black Hole',
         'Mars missions aim to study the planet’s surface and atmosphere, and eventually prepare for human exploration.',
         6, True, '2025-04-07 18:50:00', '2025-04-07 18:50:00');
 
+INSERT INTO videos (user_id, title, url, starred, created_at, updated_at)
+VALUES (1,
+        'The Universe',
+        'https://res.cloudinary.com/ds9macgdo/video/upload/v1744108125/tkpm/video/test_htszgs.mp4',
+        True, '2025-04-01 12:00:00', '2025-04-01 12:00:00'),
+       (1,
+        'Neuroscience Basics',
+        'https://res.cloudinary.com/ds9macgdo/video/upload/v1744108091/tkpm/video/video_sh5rj1.mp4',
+        True, '2025-04-02 15:30:00', '2025-04-02 15:30:00');

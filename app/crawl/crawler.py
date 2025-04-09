@@ -1,4 +1,4 @@
-﻿import wikipedia
+import concurrent.futures
 import urllib.parse
 import google.generativeai as genai
 from googletrans import Translator
@@ -6,9 +6,14 @@ import langdetect
 import requests
 import wikipedia
 import wikipediaapi
+from google import genai as genai_img
+from google.genai import types
 
-genai.configure(api_key="AIzaSyASeaYG6TS-aq64c-DCXD0_Aqg9D6sUU4o")
+# genai.configure(api_key="AIzaSyASeaYG6TS-aq64c-DCXD0_Aqg9D6sUU4o")
+# client = genai_img.Client(api_key="AIzaSyASeaYG6TS-aq64c-DCXD0_Aqg9D6sUU4o")
 
+genai.configure(api_key="AIzaSyBDU4mDsJ0LMxMzschjX5DL7lEeqFNVv90")
+client = genai_img.Client(api_key="AIzaSyBDU4mDsJ0LMxMzschjX5DL7lEeqFNVv90")
 
 def translate_to_english(text):
     translator = Translator()
@@ -81,6 +86,35 @@ def translate_text_sync(text, source_lang=None):
         print(f"Translation error: {e}")
         return text
 
+
+def generate_image(sentence, index, user_topic):
+    try:
+        sentence = translate_text_sync(sentence)
+        user_topic = translate_text_sync(user_topic)
+
+        prompt = f"""
+            Create a visually compelling, high-resolution 3D-rendered illustration inspired by the topic: "{user_topic}".
+            This specific scene should represent the following moment or idea related to that topic: "{sentence}".
+            Use cinematic lighting, futuristic or historical tech elements (depending on context), and rich, atmospheric color tones.
+            Include narrative symbolism, such as retro screens, digital interfaces, or abstract data flows that support the main idea.
+            Ensure the image ties directly back to the main theme of "{user_topic}" and conveys emotional or intellectual depth in a professional, captivating art style.
+        """
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp-image-generation",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=['Text', 'Image']
+            )
+        )
+
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                with open(f"y2k_image_{index + 1}.png", "wb") as f:
+                    f.write(part.inline_data.data)
+        print(f"✅ Image {index + 1} generated for topic '{user_topic}'")
+    except Exception as e:
+        print(f"❌ Failed to generate image for sentence {index + 1}: {e}")
 
 def detect_language_sync(text):
     try:
@@ -155,11 +189,14 @@ def generate_youtube_content(text, is_wikipedia_query=True, output_language="Eng
             prompt = f"""
                 I have the content: {text}.
 
-                Create engaging YouTube script content in paragraph format about this topic with approximately {word_count} words. 
+                Create engaging YouTube script content in paragraph format about this topic with approximately {word_count} words.
                 This content will be used for a YouTube video, so make it highly engaging and optimized for social media audience retention.
 
                 Language:
                     - {output_language}
+                    
+                Number of paragraphs:
+                    - Must less than 4 paragraphs!
 
                 Audience:
                     - Age range: {age_range}
@@ -199,6 +236,9 @@ def generate_youtube_content(text, is_wikipedia_query=True, output_language="Eng
 
                 Language:
                     - {output_language}
+                    
+                Number of paragraphs:
+                    - Must less than 4 paragraphs!
 
                 Audience:
                     - Age range: {age_range}
@@ -370,3 +410,20 @@ if __name__ == "__main__":
     youtube_script = process_user_input_sync(user_input_translated, **parameters)
     print("\nYOUTUBE SCRIPT:\n")
     print(youtube_script)
+
+    sentences = [p.strip() for p in youtube_script.split('\n\n') if p.strip()]
+    for idx, sentence in enumerate(sentences):
+        print("=================")
+        print(f"Sentence {idx + 1}: {sentence}")
+
+    if len(sentences) > 4:
+        print("⚠️ Too many sentences. Only generating images for the first 4.")
+        sentences = sentences[:4]
+
+    # Use ThreadPoolExecutor to run in parallel
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(generate_image, sentence, idx, user_input_translated)
+            for idx, sentence in enumerate(sentences)
+        ]
+        concurrent.futures.wait(futures)
