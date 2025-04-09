@@ -1,7 +1,7 @@
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
 
-from app.models import db
+from app.config.extensions import db
 
 
 class Resource(db.Model):

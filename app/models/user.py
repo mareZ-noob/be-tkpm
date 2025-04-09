@@ -2,7 +2,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import relationship
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from app.models import db
+from app.config.extensions import db
 
 
 class User(db.Model):
@@ -23,7 +23,7 @@ class User(db.Model):
 
     resources = relationship('Resource', back_populates='user')
     documents = relationship('Document', back_populates='user', cascade="all, delete-orphan")
-
+    reset_password_tokens = relationship('ResetPasswordToken', back_populates='user', cascade="all, delete-orphan")
 
     def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None,
                  description=None):
