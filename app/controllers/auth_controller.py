@@ -13,7 +13,7 @@ from flask_jwt_extended import (
 from app.config.extensions import db, limiter
 from app.models.reset_password_token import ResetPasswordToken
 from app.models.user import User
-from app.utils.email_utils import send_email
+from app.tasks.email_tasks import send_email_task
 from app.utils.exceptions import InvalidCredentialsException
 from app.utils.jwt_helpers import revoked_store
 
@@ -183,9 +183,12 @@ def forgot_password():
     </html>
     """
 
-    send_email(subject=subject, recipients=[email], body=body, html=html)
+    task = send_email_task.delay(subject=subject, recipients=[email], body=body, html=html)
 
-    return jsonify({'msg': 'Password reset email sent'}), 200
+    return jsonify({
+        'msg': 'Password reset email sent',
+        'task_id': task.id
+    }), 200
 
 
 def reset_password():
@@ -216,3 +219,30 @@ def reset_password():
     db.session.commit()
 
     return jsonify({'msg': 'Password reset successfully'}), 200
+
+
+@jwt_required()
+def change_password():
+    data = request.get_json()
+    current_user = get_jwt_identity()
+
+    if not current_user:
+        return jsonify({'msg': 'User not found'}), 404
+
+    user = User.query.get(current_user)
+    if not user:
+        return jsonify({'msg': 'User not found'}), 404
+
+    old_password = data.get('old_password')
+    new_password = data.get('new_password')
+
+    if not old_password or not new_password:
+        return jsonify({'msg': 'Old and new passwords are required'}), 400
+
+    if not user.check_password(old_password):
+        return jsonify({'msg': 'Old password is incorrect'}), 400
+
+    user.hash_password(new_password)
+    db.session.commit()
+
+    return jsonify({'msg': 'Password changed successfully'}), 200

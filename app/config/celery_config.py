@@ -11,7 +11,10 @@ def make_celery(app_name=__name__):
         app_name,
         broker=f"redis://{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/0",
         backend=f"redis://{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/0",
-        include=['app.tasks.email_tasks']
+        include=[
+            'app.tasks.email_tasks',
+            'app.tasks.upload_tasks',
+        ]
     )
 
     celery.conf.update(

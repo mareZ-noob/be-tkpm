@@ -17,12 +17,14 @@ class User(db.Model):
     gender = db.Column(db.String(100), unique=False, nullable=True)
     date_of_birth = db.Column(db.Date)
     description = db.Column(db.String(255))
+    avatar = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now(), default=func.now())
     is_active = db.Column(db.Boolean, default=True)
 
-    resources = relationship('Resource', back_populates='user')
+    videos = relationship('Video', back_populates='user', cascade="all, delete-orphan")
     documents = relationship('Document', back_populates='user', cascade="all, delete-orphan")
+    verification_tokens = relationship('VerificationToken', back_populates='user', cascade="all, delete-orphan")
     reset_password_tokens = relationship('ResetPasswordToken', back_populates='user', cascade="all, delete-orphan")
 
     def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None,
@@ -47,6 +49,7 @@ class User(db.Model):
             'email': self.email,
             'description': self.description,
             'date_of_birth': self.date_of_birth,
+            'avatar': self.avatar,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
