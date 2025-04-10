@@ -11,8 +11,7 @@ from flask_jwt_extended import (
 )
 
 from app.config.extensions import db, limiter
-from app.models.reset_password_token import ResetPasswordToken
-from app.models.user import User
+from app.models import ResetPasswordToken, User
 from app.tasks.email_tasks import send_email_task
 from app.utils.exceptions import InvalidCredentialsException
 from app.utils.jwt_helpers import revoked_store

@@ -3,7 +3,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config.extensions import db
-from app.models.user import User
+from app.models import User
 
 
 @jwt_required()

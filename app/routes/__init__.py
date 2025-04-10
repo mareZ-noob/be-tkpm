@@ -5,6 +5,7 @@ from app.routes.test_routes import test_bp
 from app.routes.tts_routes import tts_bp
 from app.routes.upload_routes import upload_bp
 from app.routes.user_routes import user_bp
+from app.routes.video_routes import video_bp
 
 
 def register_routes(app):
@@ -15,3 +16,4 @@ def register_routes(app):
     app.register_blueprint(create_bp)
     app.register_blueprint(tts_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(video_bp)
