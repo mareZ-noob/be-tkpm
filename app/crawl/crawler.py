@@ -343,6 +343,42 @@ def process_user_input_sync(user_text, **kwargs):
     except Exception as e:
         print(f"Error in processing: {e}")
         return f"An error occurred while processing your request: {e}"
+    
+def generate_youtube_script(data):
+    """
+    Generate a YouTube script based on user input data.
+
+    Parameters:
+    - data: Dictionary containing user input data
+
+    Returns:
+    - YouTube script as a string
+    """
+    try:
+        # Extract parameters from the data dictionary
+        user_text = data.get("keyword", "")
+        output_language = data.get("language")
+        age_range = data.get("age")
+        style = data.get("style")
+        word_count = 1000  # Default word count
+        tone = data.get("tone")
+
+        source_lang = detect_language_sync(user_text)
+        user_input_translated = translate_text_sync(user_text, source_lang)
+        
+        # Process the user input and generate the YouTube script
+        youtube_script = process_user_input_sync(
+            user_input_translated,
+            output_language=output_language,
+            age_range=age_range,
+            style=style,
+            word_count=word_count,
+            tone=tone
+        )
+        return youtube_script
+    except Exception as e:
+        print(f"Error in generating YouTube script: {e}")
+        return f"An error occurred while generating the YouTube script: {e}"
 
 
 if __name__ == "__main__":

@@ -10,13 +10,28 @@ from app.models.document import Document
 def create_document():
     data = request.get_json()
     current_user = get_jwt_identity()
+    print("Current user from JWT:", current_user, type(current_user))
+
+    try:
+        user_id = int(current_user)
+    except (TypeError, ValueError):
+        return jsonify({"msg": "Invalid user ID from token"}), 400
+
+    title = data.get('title')
     content = data.get('content')
-    title = data.get('title', 'Untitled')
 
-    if not current_user or not content:
-        return jsonify({"msg": "Missing id or content"}), 400
+    if not content:
+        return jsonify({"msg": "Missing content"}), 400
 
-    new_doc = Document(user_id=current_user, content=content, title=title)
+    # Nếu không có title, tự động tạo từ content
+    if not title:
+        words = content.split()
+        title = ' '.join(words[:10]) + ('...' if len(words) > 10 else '')
+
+    if not content:
+        return jsonify({"msg": "Missing content"}), 400
+
+    new_doc = Document(user_id=user_id, content=content, title=title)
     db.session.add(new_doc)
     db.session.commit()
 

@@ -18,7 +18,7 @@ class Document(db.Model):
     user = relationship('User', back_populates='documents')
 
     def __init__(self, user_id, content, title=None):
-        self.userId = user_id
+        self.user_id = user_id
         self.content = content
         self.title = title
 
