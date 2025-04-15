@@ -1,11 +1,8 @@
-import os
-
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from werkzeug.utils import secure_filename
 
-from app.config.extensions import db
-from app.models import User, Video
+from app.models import User
 from app.tasks.upload_tasks import process_avatar_upload, process_video_upload
 from app.utils.constant import ALLOWED_IMAGE_EXTENSIONS, ALLOWED_VIDEO_EXTENSIONS
 

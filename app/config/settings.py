@@ -30,12 +30,12 @@ class Config:
     REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 
     # Celery Configuration
-    broker_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
-    result_backend = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+    broker_url = f"redis://{os.getenv('REDIS_USERNAME')}:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/0"
+    result_backend = f"redis://{os.getenv('REDIS_USERNAME')}:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/0"
 
     # Rate Limiting
     RATELIMIT_ENABLED = True
-    RATELIMIT_STORAGE_URI = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
+    RATELIMIT_STORAGE_URI = f"redis://{os.getenv('REDIS_USERNAME')}:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/1"
     RATELIMIT_STRATEGY = "sliding-window-counter"
 
     # Mail Configuration

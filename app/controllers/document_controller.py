@@ -2,8 +2,7 @@
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.config.extensions import db
-from app.models import User
-from app.models.document import Document
+from app.models import Document, User
 
 
 @jwt_required()
@@ -92,3 +91,23 @@ def search_documents():
 
     return jsonify([doc.to_dict() for doc in documents])
 
+
+@jwt_required()
+def duplicate_document(document_id):
+    document = Document.query.get(document_id)
+    if not document:
+        return jsonify({"msg": "Document not found"}), 404
+
+    data = request.get_json()
+    title = data.get('title', 'Untitled')
+
+    new_document = Document(
+        user_id=document.user_id,
+        content=document.content,
+        title=title,
+        starred=document.starred
+    )
+    db.session.add(new_document)
+    db.session.commit()
+
+    return jsonify(new_document.to_dict()), 201

@@ -17,10 +17,11 @@ class Document(db.Model):
 
     user = relationship('User', back_populates='documents')
 
-    def __init__(self, user_id, content, title=None):
+    def __init__(self, user_id, content, title=None, starred=False):
         self.user_id = user_id
         self.content = content
         self.title = title
+        self.starred = starred
 
     def __repr__(self):
         return f'<ID: {self.id}, User ID: {self.user_id}, Title: {self.title}>, Content: {self.content}>'
