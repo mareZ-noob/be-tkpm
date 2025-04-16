@@ -13,6 +13,7 @@ from flask_jwt_extended import (
 from app.config.extensions import db, limiter
 from app.models import ResetPasswordToken, User
 from app.tasks.email_tasks import send_email_task
+from app.utils.constant import FRONTEND_URL
 from app.utils.exceptions import InvalidCredentialsException
 from app.utils.jwt_helpers import revoked_store
 
@@ -122,8 +123,7 @@ def forgot_password():
     db.session.add(reset_token)
     db.session.commit()
 
-    frontend_url = current_app.config.get('FRONTEND_URL', 'http://localhost:5173')
-    url = f"{frontend_url}/reset-password?token={token}"
+    url = f"{FRONTEND_URL}/reset-password?token={token}"
     subject = "Password Reset Request - saikou"
 
     body = f"""Dear User,

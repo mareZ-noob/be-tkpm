@@ -1,6 +1,12 @@
 ﻿from flask import Blueprint
 
-from app.controllers.document_controller import create_document, delete_document, duplicate_document, get_user_documents, update_document
+from app.controllers.document_controller import (
+    create_document,
+    delete_document,
+    duplicate_document,
+    get_user_documents,
+    update_document,
+)
 
 doc_bp = Blueprint('document', __name__, url_prefix='/documents')
 

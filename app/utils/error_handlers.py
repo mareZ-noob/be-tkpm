@@ -34,7 +34,7 @@ def register_error_handlers(app):
     def unauthorized(error):
         return jsonify({
             'error': str(error),
-            'message': 'Authentication required',
+            'msg': 'Authentication required',
         }), 401
 
     @app.errorhandler(403)

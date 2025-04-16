@@ -30,3 +30,20 @@ DEFAULT_TIKTOK_VOICE = "en_us_001"
 JAPANESE_TEXT_BYTE_LIMIT = 70
 ENGLISH_TEXT_BYTE_LIMIT = 100
 VIETNAMESE_TEXT_BYTE_LIMIT = 100
+
+API_SERVICE_NAME = "youtube"
+API_VERSION = "v3"
+CLIENT_SECRETS_FILE = "credentials.json"
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
+          "https://www.googleapis.com/auth/youtube.readonly",
+          "https://www.googleapis.com/auth/userinfo.profile",
+          "https://www.googleapis.com/auth/userinfo.email",
+          "openid"]
+
+
+FRONTEND_URL= os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+CHUNK_SIZE = 3 * 1024 * 1024
+DOWNLOAD_RETRIES = 3
+DOWNLOAD_BACKOFF_FACTOR = 1
+DOWNLOAD_TIMEOUT = (10, 60)

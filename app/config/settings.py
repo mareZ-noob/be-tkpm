@@ -35,7 +35,7 @@ class Config:
 
     # Rate Limiting
     RATELIMIT_ENABLED = True
-    RATELIMIT_STORAGE_URI = f"redis://{os.getenv('REDIS_USERNAME')}:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/1"
+    RATELIMIT_STORAGE_URI = f"redis://{os.getenv('REDIS_USERNAME')}:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/0"
     RATELIMIT_STRATEGY = "sliding-window-counter"
 
     # Mail Configuration
