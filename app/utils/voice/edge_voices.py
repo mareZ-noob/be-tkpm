@@ -1377,7 +1377,7 @@ EDGE_FORMATTED_VOICES = {
             "my-MM-ThihaNeural",
         ],
     },
-    "Norwegian Bokmål": {
+    "Norwegian Bokmal": {
         "Female": [
             "nb-NO-PernilleNeural",
         ],
