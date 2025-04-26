@@ -53,3 +53,5 @@ def setup_logging():
         root_logger.info(f"Werkzeug logging configured with custom format at level {werkzeug_logger.level}")
 
     root_logger.info(f"Root logging setup complete. Handler level: {LOG_LEVEL}")
+
+    return root_logger

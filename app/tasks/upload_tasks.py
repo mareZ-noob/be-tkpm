@@ -51,10 +51,10 @@ def process_avatar_upload(self, user_id, file_data):
         return {'msg': 'success', 'url': secure_url}
 
     except Exception as exc:
-        logger.warning(f"[Task ID: {task_id}] Exception occurred during avatar upload for user {user_id}. Error: {exc}")
+        logger.error(f"[Task ID: {task_id}] Exception occurred during avatar upload for user {user_id}. Error: {exc}")
         try:
             retry_count = self.request.retries + 1
-            logger.warning(
+            logger.error(
                 f"[Task ID: {task_id}] Retrying avatar upload for user {user_id}... Attempt {retry_count}/{self.max_retries}. Countdown: 5s.")
             self.retry(exc=exc, countdown=5)
         except self.MaxRetriesExceededError as e:
@@ -106,11 +106,11 @@ def process_video_upload(self, user_id, file_data, filename, title=None):
         return {'msg': 'success', 'url': secure_url}
 
     except Exception as exc:
-        logger.warning(
+        logger.error(
             f"[Task ID: {task_id}] Exception occurred during video upload for user {user_id}, filename: {filename}. Error: {exc}")
         try:
             retry_count = self.request.retries + 1
-            logger.warning(
+            logger.error(
                 f"[Task ID: {task_id}] Retrying video upload for user {user_id}, filename: {filename}... Attempt {retry_count}/{self.max_retries}. Countdown: 5s.")
             self.retry(exc=exc, countdown=5)
         except self.MaxRetriesExceededError as e:
@@ -161,11 +161,11 @@ def process_audio_upload(self, user_id, file_data, filename):
         return {'msg': 'success', 'url': secure_url}
 
     except Exception as exc:
-        logger.warning(
+        logger.error(
             f"[Task ID: {task_id}] Exception occurred during audio upload for user {user_id}, filename: {filename}. Error: {exc}")
         try:
             retry_count = self.request.retries + 1
-            logger.warning(
+            logger.error(
                 f"[Task ID: {task_id}] Retrying audio upload for user {user_id}, filename: {filename}... Attempt {retry_count}/{self.max_retries}. Countdown: 5s.")
             self.retry(exc=exc, countdown=5)
         except self.MaxRetriesExceededError as e:

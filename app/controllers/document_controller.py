@@ -2,38 +2,39 @@
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.config.extensions import db
+from app.config.logging_config import setup_logging
 from app.models import Document, User
+from app.utils.exceptions import MissingParameterException, ResourceNotFoundException
+from app.utils.jwt_helpers import get_user_from_jwt, get_user_id_from_jwt
+
+logger = setup_logging()
 
 
 @jwt_required()
 def create_document():
     data = request.get_json()
-    current_user = get_jwt_identity()
-    print("Current user from JWT:", current_user, type(current_user))
-
-    try:
-        user_id = int(current_user)
-    except (TypeError, ValueError):
-        return jsonify({"msg": "Invalid user ID from token"}), 400
+    user_id = get_user_id_from_jwt()
+    if user_id is None:
+        logger.error("Create document failed: User ID not provided.")
+        raise MissingParameterException("Missing required fields: user_id")
 
     title = data.get('title')
     content = data.get('content')
 
     if not content:
-        return jsonify({"msg": "Missing content"}), 400
+        logger.error("Create document failed: Missing content.")
+        raise MissingParameterException("Missing required fields: content")
 
-    # Nếu không có title, tự động tạo từ content
     if not title:
         words = content.split()
         title = ' '.join(words[:10]) + ('...' if len(words) > 10 else '')
-
-    if not content:
-        return jsonify({"msg": "Missing content"}), 400
+        logger.info(f"Create document title: {title}")
 
     new_doc = Document(user_id=user_id, content=content, title=title)
     db.session.add(new_doc)
     db.session.commit()
 
+    logger.info(f"Document created: {new_doc}")
     return jsonify(new_doc.to_dict()), 201
 
 
@@ -41,12 +42,14 @@ def create_document():
 def update_document(document_id):
     document = Document.query.get(document_id)
     if not document:
-        return jsonify({"msg": "Document not found"}), 404
+        logger.error("Update document failed: Document not found.")
+        raise ResourceNotFoundException("Document not found")
 
     data = request.get_json()
     document.from_dict(data)
     db.session.commit()
 
+    logger.info(f"Update document: {document_id}")
     return jsonify(document.to_dict())
 
 
@@ -54,30 +57,33 @@ def update_document(document_id):
 def delete_document(document_id):
     document = Document.query.get(document_id)
     if not document:
-        return jsonify({"msg": "Document not found"}), 404
+        logger.error("Delete document failed: Document not found.")
+        raise ResourceNotFoundException("Document not found")
 
     db.session.delete(document)
     db.session.commit()
 
+    logger.info(f"Delete document {document_id}")
     return jsonify({"msg": "Document deleted"}), 200
 
 
 @jwt_required()
 def get_user_documents():
-    current_user = get_jwt_identity()
-    user = User.query.get(current_user)
-    if not user:
-        return jsonify({"msg": "User not found"}), 404
+    user = get_user_from_jwt()
+    if user is None:
+        logger.error("Get user documents failed: User not found.")
+        raise ResourceNotFoundException("User not found")
     documents = Document.query.filter_by(user_id=user.id).all()
+    logger.info(f"User {user.id} has {len(documents)} documents.")
     return jsonify([doc.to_dict() for doc in documents])
 
 
 @jwt_required()
 def search_documents():
-    current_user = get_jwt_identity()
-    user = User.query.get(current_user)
-    if not user:
-        return jsonify({"msg": "User not found"}), 404
+    user = get_user_from_jwt()
+    if user is None:
+        logger.error("Search documents failed: User not found.")
+        raise ResourceNotFoundException("User not found")
 
     search_query = request.args.get('query')
     if not search_query:
@@ -96,7 +102,8 @@ def search_documents():
 def duplicate_document(document_id):
     document = Document.query.get(document_id)
     if not document:
-        return jsonify({"msg": "Document not found"}), 404
+        logger.error("Duplicate document failed: Document not found.")
+        raise ResourceNotFoundException("Document not found")
 
     data = request.get_json()
     title = data.get('title', 'Untitled')
@@ -110,4 +117,5 @@ def duplicate_document(document_id):
     db.session.add(new_document)
     db.session.commit()
 
+    logger.info(f"Duplicate document: {document_id}")
     return jsonify(new_document.to_dict()), 201

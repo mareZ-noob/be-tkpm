@@ -1,4 +1,4 @@
-class ResourceFoundException(Exception):
+class ResourceNotFoundException(Exception):
     pass
 
 
@@ -46,7 +46,7 @@ class UsernameAlreadyExistsException(Exception):
     pass
 
 
-class InternalServerErrorException(Exception):
+class InternalServerException(Exception):
     pass
 
 
@@ -63,4 +63,8 @@ class UnauthorizedException(Exception):
 
 
 class MissingParameterException(Exception):
+    pass
+
+
+class ServiceUnavailableException(Exception):
     pass

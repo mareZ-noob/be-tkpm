@@ -4,7 +4,7 @@ from app.utils.exceptions import (
     BadRequestException,
     EmailAlreadyExistsException,
     ForbiddenException,
-    InternalServerErrorException,
+    InternalServerException,
     InvalidCredentialsException,
     InvalidEmailException,
     InvalidPasswordException,
@@ -12,7 +12,8 @@ from app.utils.exceptions import (
     InvalidUsernameException,
     MissingParameterException,
     PasswordResetLimitExceededException,
-    ResourceFoundException,
+    ResourceNotFoundException,
+    ServiceUnavailableException,
     TokenExpiredException,
     TokenRevokedException,
     UnauthorizedException,
@@ -74,7 +75,7 @@ def register_error_handlers(app):
 
     # Custom error handlers for specific exceptions
     error_map = {
-        ResourceFoundException: ("Resource not found", 404),
+        ResourceNotFoundException: ("Resource not found", 404),
         InvalidCredentialsException: ("Invalid credentials", 401),
         UserAlreadyExistsException: ("User already exists", 400),
         InvalidTokenException: ("Invalid token", 401),
@@ -86,11 +87,12 @@ def register_error_handlers(app):
         InvalidUsernameException: ("Invalid username", 400),
         EmailAlreadyExistsException: ("Email already exists", 400),
         UsernameAlreadyExistsException: ("Username already exists", 400),
-        InternalServerErrorException: ("Internal server error", 500),
+        InternalServerException: ("Internal server error", 500),
         ForbiddenException: ("Access denied", 403),
         BadRequestException: ("Bad request", 400),
         UnauthorizedException: ("Authentication required", 401),
         MissingParameterException: ("Missing parameter", 400),
+        ServiceUnavailableException: ("Service unavailable", 503),
     }
 
     for exception, (message, status_code) in error_map.items():

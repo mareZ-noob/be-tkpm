@@ -7,20 +7,32 @@ import google_auth_oauthlib.flow
 import googleapiclient.discovery
 import googleapiclient.errors
 from celery.result import AsyncResult
-from flask import current_app, jsonify, redirect, request, session, url_for
+from flask import jsonify, redirect, request, session, url_for
 
 from app.config.celery_config import make_celery
+from app.config.logging_config import setup_logging
 from app.tasks.youtube_tasks import upload_from_file_task, upload_from_url_task
 from app.utils.constant import API_SERVICE_NAME, API_VERSION, CLIENT_SECRETS_FILE, FRONTEND_URL, SCOPES
+from app.utils.exceptions import (
+    ForbiddenException,
+    InternalServerException,
+    InvalidCredentialsException,
+    MissingParameterException,
+    ResourceNotFoundException,
+)
+
+logger = setup_logging()
 
 
 def _get_credentials_from_session():
     if 'credentials' not in session:
+        logger.info('No credentials found in session')
         return None
     try:
+        logger.debug('Retrieving OAuth 2.0 credentials from session')
         return google.oauth2.credentials.Credentials(**session['credentials'])
     except Exception as e:
-        current_app.logger.error(f"Error loading credentials from session: {e}")
+        logger.error(f"Error loading credentials from session: {e}", exc_info=True)
         del session['credentials']
         return None
 
@@ -35,15 +47,17 @@ def _store_credentials_in_session(credentials):
         'scopes': credentials.scopes
     }
     session.permanent = True
+    logger.info("Stored credentials in session.")
 
 
 def _get_youtube_client_from_session():
     credentials = _get_credentials_from_session()
     if not credentials:
+        logger.error("Cannot build YouTube client: No credentials available.")
         return None
     try:
         if credentials.expired and credentials.refresh_token:
-            current_app.logger.info("Credentials expired, relying on auto-refresh.")
+            logger.info("Credentials expired, relying on auto-refresh.")
             credentials.refresh(google.auth.transport.requests.Request())
             _store_credentials_in_session(credentials)
 
@@ -51,31 +65,38 @@ def _get_youtube_client_from_session():
             API_SERVICE_NAME, API_VERSION, credentials=credentials
         )
     except Exception as e:
-        current_app.logger.error(f"Failed to build YouTube client: {e}")
+        logger.error(f"Failed to build YouTube client: {e}", exc_info=True)
         return None
 
 
 def authorize_youtube():
-    flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE, scopes=SCOPES)
-    # callback_url = url_for('youtube.oauth2_callback', _external=True)
-    # flow.redirect_uri = callback_url
-    flow.redirect_uri = request.base_url + '/callback'
-
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true',
-        prompt='consent'
-    )
-    session['state'] = state
-    return jsonify({'auth_url': authorization_url})
+    try:
+        logger.info("Initiating YouTube authorization flow.")
+        flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
+            CLIENT_SECRETS_FILE, scopes=SCOPES)
+        # callback_url = url_for('youtube.oauth2_callback', _external=True, _scheme='https')
+        # flow.redirect_uri = callback_url
+        flow.redirect_uri = request.base_url + '/callback'
+        logger.info(f"Using redirect URI: {flow.redirect_uri}")
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+        session['state'] = state
+        logger.info(f"Generated authorization URL. State stored in session: {state}")
+        return jsonify({'auth_url': authorization_url})
+    except Exception as e:
+        logger.error(f"Failed to generate authorization URL: {e}", exc_info=True)
+        return None
 
 
 def oauth2_callback():
+    logger.info("Received OAuth2 callback.")
     # state = session.pop('state', None)
     state = session.get('state', '')
     # if not state or state != request.args.get('state'):
-    #     current_app.logger.warning("OAuth state mismatch.")
+    #     logger.error("OAuth state mismatch.")
     #     return jsonify({'error': 'Invalid state parameter'}), 400
 
     flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
@@ -95,20 +116,24 @@ def oauth2_callback():
     try:
         flow.fetch_token(authorization_response=authorization_response)
         credentials = flow.credentials
+        logger.info("OAuth token fetched successfully.")
         _store_credentials_in_session(credentials)
         return redirect(f'{FRONTEND_URL}/dashboard')
     except Exception as e:
-        current_app.logger.error(f"Error fetching OAuth token: {e}")
-        return jsonify({'error': f'Failed to fetch token: {str(e)}'}), 400
+        logger.error(f"Error fetching OAuth token: {e}")
+        raise InvalidCredentialsException('Invalid credentials provided')
 
 
 def get_auth_status():
+    logger.debug("Checking authentication status.")
     credentials = _get_credentials_from_session()
     is_authenticated = bool(credentials and (credentials.token or credentials.refresh_token))
+    logger.info(f"User authentication status: {is_authenticated}")
     return jsonify({'is_authenticated': is_authenticated})
 
 
 def logout_youtube():
+    logger.info("Processing logout request.")
     if 'credentials' in session:
         # Optional: Revoke the token on Google's side
         # credentials = _get_credentials_from_session()
@@ -118,14 +143,16 @@ def logout_youtube():
         #             params={'token': credentials.token},
         #             headers = {'content-type': 'application/x-www-form-urlencoded'})
         #     except Exception as e:
-        #         current_app.logger.warning(f"Failed to revoke token: {e}")
+        #         logger.error(f"Failed to revoke token: {e}")
         del session['credentials']
     return jsonify({'msg': 'Logged out successfully'})
 
 
 def upload_video():
+    logger.info("Received request to upload video.")
     if 'credentials' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
+        logger.error("Upload video request failed: No credentials found in session.")
+        raise ForbiddenException("Not authenticated")
 
     credentials_dict = session['credentials']
 
@@ -145,7 +172,8 @@ def upload_video():
             data = request.get_json()
             video_url = data.get('video_url')
             if not video_url:
-                return jsonify({'error': 'No video URL provided'}), 400
+                logger.error("Upload video request failed: No video URL provided")
+                raise MissingParameterException("Missing video URL")
 
             metadata.update({
                 'title': data.get('title', metadata['title']),
@@ -160,11 +188,13 @@ def upload_video():
 
         else:
             if 'file' not in request.files:
-                return jsonify({'error': 'No file provided'}), 400
+                logger.error("Upload video request failed: No file provided")
+                raise MissingParameterException("Missing video file")
 
             video_file = request.files['file']
             if not video_file or not video_file.filename:
-                return jsonify({'error': 'Invalid file provided'}), 400
+                logger.error("Upload video request failed: No file selected")
+                raise MissingParameterException("Missing file")
 
             metadata.update({
                 'title': request.form.get('title', metadata['title']),
@@ -185,13 +215,13 @@ def upload_video():
             temp_file_to_delete = None
 
     except Exception as e:
-        current_app.logger.error(f"Error initiating upload task: {e}")
+        logger.error(f"Error initiating upload task: {e}", exc_info=True)
         if temp_file_to_delete and os.path.exists(temp_file_to_delete):
             try:
                 os.remove(temp_file_to_delete)
             except OSError as rm_err:
-                current_app.logger.error(f"Error removing temp file during exception: {rm_err}")
-        return jsonify({'error': f'Failed to start upload task: {str(e)}'}), 500
+                logger.error(f"Error removing temp file during exception: {rm_err}", exc_info=True)
+        raise InternalServerException(f'Failed to start upload task: {str(e)}')
 
     if task:
         status_url = url_for('youtube.check_upload_status', task_id=task.id, _external=True)
@@ -202,10 +232,12 @@ def upload_video():
             'status_url': status_url
         })
     else:
-        return jsonify({'error': 'Upload task could not be created'}), 500
+        logger.error("Error initiating upload task")
+        raise InternalServerException("Failed to start upload task")
 
 
 def check_upload_status(task_id):
+    logger.debug(f"Checking status for upload task ID: {task_id}")
     celery_app = make_celery()
     task_result = AsyncResult(task_id, app=celery_app)
 
@@ -214,13 +246,16 @@ def check_upload_status(task_id):
     info = task_result.info
 
     response = {'state': state}
+    logger.debug(f"Checking status for upload task ID: {task_id}")
 
     if state == 'PENDING':
+        logger.info(f"Task {task_id} is PENDING.")
         response['status'] = 'Upload pending or task ID unknown.'
     elif state == 'FAILURE':
         response['status'] = 'Upload failed.'
         error_info = info if isinstance(info, str) else str(info.get('error', info))
         response['error'] = error_info
+        logger.error(f"Task {task_id} FAILED. Error: {error_info}")
     elif state in ['DOWNLOADING', 'UPLOADING', 'PROGRESS']:  # Use 'PROGRESS' as a generic state
         response['status'] = info.get('status', 'Processing...')
         response['current'] = info.get('current', 0)
@@ -229,25 +264,30 @@ def check_upload_status(task_id):
         total = response['total']
         current = response['current']
         response['percent'] = int(current / total * 100) if total > 0 else 0
+        logger.info(f"Task {task_id} is in progress: {response['status']} ({response['percent']}%)")
     elif state == 'SUCCESS':
         response['status'] = 'Upload completed successfully.'
         response['result'] = task_result.result
+        logger.info(f"Task {task_id} SUCCEEDED. Result: {response['result']}")
     else:
         response['status'] = 'Unknown task state.'
         if info:
             response['info'] = str(info)  # Include any info for debugging
+        logger.error(f"Task {task_id} has unexpected state: {state}. Info: {info}")
 
     return jsonify(response)
 
 
 def get_video_stats():
+    logger.info("Attempting to fetch video statistics.")
     youtube = _get_youtube_client_from_session()
     if not youtube:
         if 'credentials' not in session:
-            return jsonify({'error': 'Not authenticated'}), 401
+            logger.error("YouTube API request failed: No credentials found in session.")
+            raise ForbiddenException("Not authenticated")
         else:
-            return jsonify({'error': 'Failed to create YouTube client, possibly invalid credentials'}), 500
-
+            logger.error("YouTube API request failed: No credentials found in session.")
+            raise InvalidCredentialsException('Invalid credentials provided')
     try:
         # Get channel ID (using 'mine=True')
         channels_response = youtube.channels().list(
@@ -256,7 +296,8 @@ def get_video_stats():
         ).execute()
 
         if not channels_response.get('items'):
-            return jsonify({'error': 'Could not find YouTube channel for this account'}), 404
+            logger.error("Google API error: Could not find YouTube channel for this account")
+            raise ResourceNotFoundException('Could not find YouTube channel for this account')
 
         # Get the ID of the uploads playlist
         uploads_playlist_id = channels_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
@@ -320,9 +361,10 @@ def get_video_stats():
         error_content = e.content.decode('utf-8') if hasattr(e, 'content') else str(e)
         if e.resp.status == 401:
             if 'credentials' in session: del session['credentials']
-            return jsonify({'error': f'Authentication error: {error_content}', 'auth_required': True}), 401
-        current_app.logger.error(f"YouTube API error: {error_content}")
+            logger.error(f"YouTube API error: {error_content}")
+            raise ForbiddenException("Not authenticated")
+        logger.error(f"YouTube API error: {error_content}")
         return jsonify({'error': f"An API error occurred: {error_content}"}), e.resp.status
     except Exception as e:
-        current_app.logger.error(f"Unexpected error fetching video stats: {e}")
-        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+        logger.error(f"Unexpected error fetching video stats: {e}", exc_info=True)
+        raise InternalServerException(f'An unexpected error occurred: {str(e)}')

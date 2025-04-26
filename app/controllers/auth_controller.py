@@ -11,25 +11,40 @@ from flask_jwt_extended import (
 )
 
 from app.config.extensions import db, limiter
+from app.config.logging_config import setup_logging
 from app.models import ResetPasswordToken, User
 from app.tasks.email_tasks import send_email_task
 from app.utils.constant import FRONTEND_URL
-from app.utils.exceptions import InvalidCredentialsException
-from app.utils.jwt_helpers import revoked_store
+from app.utils.exceptions import (
+    BadRequestException,
+    EmailAlreadyExistsException,
+    InvalidCredentialsException,
+    InvalidTokenException,
+    MissingParameterException,
+    ResourceNotFoundException,
+    UsernameAlreadyExistsException,
+)
+from app.utils.jwt_helpers import get_user_from_jwt, revoked_store
+
+logger = setup_logging()
 
 
 def login():
     data = request.json
     required_fields = ['username', 'password']
+
     if not all(field in data for field in required_fields):
-        return jsonify({'msg': 'Missing required fields'}), 400
+        logger.error("Login failed: Missing username or password field.")
+        raise MissingParameterException("Missing required fields: {}".format(", ".join(required_fields)))
 
     user = User.query.filter_by(username=data['username']).first()
     if not user or not user.check_password(data['password']):
+        logger.error("Login failed: Invalid username or password.")
         raise InvalidCredentialsException("Invalid username or password")
 
     access_token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
+    logger.info("User logged in successfully: %s", user.username)
 
     response = jsonify({
         "user": user.to_dict(),
@@ -52,13 +67,16 @@ def register():
     required_fields = ['username', 'email', 'password']
 
     if not all(field in data for field in required_fields):
-        return jsonify({'msg': 'Missing required fields'}), 400
+        logger.error("Register failed: Missing username or password field.")
+        raise MissingParameterException("Missing required fields: {}".format(", ".join(required_fields)))
 
     if User.query.filter_by(username=data['username']).first():
-        return jsonify({'msg': 'Username already exists'}), 400
+        logger.error("Register failed: Username already exists.")
+        raise UsernameAlreadyExistsException("Username already exists")
 
     if User.query.filter_by(email=data['email']).first():
-        return jsonify({'msg': 'Email already exists'}), 400
+        logger.error("Register failed: Email already exists.")
+        raise EmailAlreadyExistsException("Email already exists")
 
     user = User(
         username=data['username'],
@@ -77,7 +95,7 @@ def register():
 def refresh():
     current_user = get_jwt_identity()
     access_token = create_access_token(identity=current_user)
-
+    logger.info(f"Refreshing access token for user {current_user}")
     return jsonify({"access_token": access_token}), 200
 
 
@@ -85,14 +103,16 @@ def refresh():
 def logout():
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"msg": "Missing access token"}), 401
+        logger.error("Logout failed: Missing authorization header.")
+        raise BadRequestException("Missing authorization header")
 
     access_token = auth_header.split(" ")[1]
     try:
         decoded_token = decode_token(access_token)
         jti = decoded_token["jti"]
-    except Exception:
-        return jsonify({"msg": "Invalid access token"}), 401
+    except Exception as e:
+        logger.error(f"Unexpected error during logout: {e}", exc_info=True)
+        raise InvalidCredentialsException("Invalid token")
 
     revoked_store.add(jti)
     response = jsonify({"msg": "Logged out"})
@@ -111,11 +131,13 @@ def forgot_password():
     email = data.get('email')
 
     if not email:
-        return jsonify({'msg': 'Email is required'}), 400
+        logger.error("Forgot password failed: Missing email.")
+        raise BadRequestException("Missing email")
 
     user = User.query.filter_by(email=email).first()
     if not user:
-        return jsonify({'msg': 'User not found'}), 404
+        logger.error("Forgot password failed: User not found.")
+        raise ResourceNotFoundException("User not found")
 
     token = ResetPasswordToken.create_reset_password_token(user.id)
 
@@ -183,6 +205,7 @@ def forgot_password():
     """
 
     task = send_email_task.delay(subject=subject, recipients=[email], body=body, html=html)
+    logger.info(f"Email sent: {task}")
 
     return jsonify({
         'msg': 'Password reset email sent',
@@ -196,20 +219,24 @@ def reset_password():
     new_password = data.get('new_password')
 
     if not token or not new_password:
-        return jsonify({'msg': 'Token and new password are required'}), 400
+        logger.error("Reset password failed: Missing token or new password.")
+        raise MissingParameterException("Missing required parameters: token and new_password")
 
     reset_token = ResetPasswordToken.query.filter_by(token=token).first()
     if not reset_token:
-        return jsonify({'msg': 'Invalid token'}), 400
+        logger.error("Reset password failed: Token not found.")
+        raise ResourceNotFoundException("Token not found")
 
     if reset_token.expired_at < datetime.now(timezone.utc):
         db.session.delete(reset_token)
         db.session.commit()
-        return jsonify({'msg': 'Token has expired'}), 400
+        logger.error("Reset password failed: Token expired.")
+        raise InvalidTokenException("Token expired")
 
     user = User.query.get(reset_token.user_id)
     if not user:
-        return jsonify({'msg': 'User not found'}), 404
+        logger.error("Reset password failed: User not found.")
+        raise ResourceNotFoundException("User not found")
 
     user.hash_password(new_password)
     db.session.commit()
@@ -223,23 +250,21 @@ def reset_password():
 @jwt_required()
 def change_password():
     data = request.get_json()
-    current_user = get_jwt_identity()
-
-    if not current_user:
-        return jsonify({'msg': 'User not found'}), 404
-
-    user = User.query.get(current_user)
-    if not user:
-        return jsonify({'msg': 'User not found'}), 404
+    user = get_user_from_jwt()
+    if user is None:
+        logger.error("Change password failed: User not found.")
+        raise ResourceNotFoundException("User not found")
 
     old_password = data.get('old_password')
     new_password = data.get('new_password')
 
     if not old_password or not new_password:
-        return jsonify({'msg': 'Old and new passwords are required'}), 400
+        logger.error("Change password failed: Missing old password.")
+        raise MissingParameterException("Missing required parameters: old_password and new_password")
 
     if not user.check_password(old_password):
-        return jsonify({'msg': 'Old password is incorrect'}), 400
+        logger.error("Change password failed: Old password is incorrect.")
+        raise InvalidCredentialsException("Old password is incorrect")
 
     user.hash_password(new_password)
     db.session.commit()

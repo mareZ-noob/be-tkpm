@@ -1,4 +1,3 @@
-import logging
 import uuid
 
 import cloudinary
@@ -11,9 +10,14 @@ from app.config.logging_config import setup_logging
 from app.models import User
 from app.tasks.upload_tasks import process_avatar_upload, process_video_upload
 from app.utils.constant import ALLOWED_AUDIO_EXTENSIONS, ALLOWED_IMAGE_EXTENSIONS, ALLOWED_VIDEO_EXTENSIONS
+from app.utils.exceptions import (
+    BadRequestException,
+    InternalServerException,
+    MissingParameterException,
+    ResourceNotFoundException,
+)
 
-setup_logging()
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 
 def allowed_file(filename, allowed_extensions):
@@ -28,32 +32,32 @@ def upload_avatar():
         logger.info("Received request to upload avatar.")
 
         if 'file' not in request.files:
-            logger.warning("Avatar upload request failed: 'file' part missing in request.")
-            return jsonify({'msg': 'No file part'}), 400
+            logger.error("Avatar upload request failed: 'file' part missing in request.")
+            raise MissingParameterException("Missing required fields: file")
 
         file = request.files['file']
         if file.filename == '':
-            logger.warning("Avatar upload request failed: No file selected.")
-            return jsonify({'msg': 'No selected file'}), 400
+            logger.error("Avatar upload request failed: No file selected.")
+            raise MissingParameterException("Missing required fields: file")
 
         original_filename = file.filename
         logger.debug(f"Received avatar file: '{original_filename}'")
 
         if not allowed_file(original_filename, ALLOWED_IMAGE_EXTENSIONS):
-            logger.warning(f"Avatar upload request failed: File type not allowed for filename '{original_filename}'.")
-            return jsonify({'msg': 'File type not allowed'}), 400
+            logger.error(f"Avatar upload request failed: File type not allowed for filename '{original_filename}'.")
+            raise BadRequestException(f"File type not allowed for filename '{original_filename}'.")
 
         user_id = get_jwt_identity()
         if not user_id:
-            logger.warning("Avatar upload request failed: JWT identity missing or invalid.")
-            return jsonify({"msg": "User not found or invalid token"}), 401
+            logger.error("Avatar upload request failed: JWT identity missing or invalid.")
+            raise MissingParameterException("User not found or invalid token")
 
         logger.info(f"Processing avatar upload request for user_id: {user_id}")
 
         user = User.query.get(user_id)
         if not user:
-            logger.warning(f"Avatar upload request failed: User with id {user_id} not found in database.")
-            return jsonify({"msg": "User not found"}), 404
+            logger.error(f"Avatar upload request failed: User with id {user_id} not found in database.")
+            raise ResourceNotFoundException(f"User with id {user_id} not found in database.")
 
         filename = secure_filename(original_filename)
         file_data = file.read()
@@ -71,7 +75,7 @@ def upload_avatar():
         logger.error(
             f"An unexpected error occurred during avatar upload request for user_id {user_id if user_id else 'unknown'}: {e}",
             exc_info=True)
-        return jsonify({'msg': 'An internal server error occurred.'}), 500
+        raise InternalServerException("Internal server error")
 
 
 @jwt_required()
@@ -81,35 +85,35 @@ def upload_video():
         logger.info("Received request to upload video.")
 
         if 'file' not in request.files:
-            logger.warning("Video upload request failed: 'file' part missing in request.")
-            return jsonify({'msg': 'No file part'}), 400
+            logger.error("Video upload request failed: 'file' part missing in request.")
+            raise MissingParameterException("Missing required fields: file")
 
         file = request.files['file']
         if file.filename == '':
-            logger.warning("Video upload request failed: No file selected.")
-            return jsonify({'msg': 'No selected file'}), 400
+            logger.error("Video upload request failed: No file selected.")
+            raise MissingParameterException("Missing required fields: file")
 
         original_filename = file.filename
         logger.debug(f"Received video file: '{original_filename}'")
 
         if not allowed_file(original_filename, ALLOWED_VIDEO_EXTENSIONS):
-            logger.warning(f"Video upload request failed: File type not allowed for filename '{original_filename}'.")
-            return jsonify({'msg': 'File type not allowed'}), 400
+            logger.error(f"Video upload request failed: File type not allowed for filename '{original_filename}'.")
+            raise BadRequestException(f"File type not allowed for filename '{original_filename}'.")
 
         title = request.form.get('title')  # Optional title from form data
         logger.debug(f"Received video title (optional): '{title}'")
 
         user_id = get_jwt_identity()
         if not user_id:
-            logger.warning("Video upload request failed: JWT identity missing or invalid.")
-            return jsonify({"msg": "User not found or invalid token"}), 401
+            logger.error("Video upload request failed: JWT identity missing or invalid.")
+            raise MissingParameterException("User not found or invalid token")
 
         logger.info(f"Processing video upload request for user_id: {user_id}")
 
         user = User.query.get(user_id)
         if not user:
-            logger.warning(f"Video upload request failed: User with id {user_id} not found in database.")
-            return jsonify({"msg": "User not found"}), 404
+            logger.error(f"Video upload request failed: User with id {user_id} not found in database.")
+            raise ResourceNotFoundException(f"User with id {user_id} not found in database.")
 
         filename = secure_filename(original_filename)
         file_data = file.read()
@@ -127,7 +131,7 @@ def upload_video():
         logger.error(
             f"An unexpected error occurred during video upload request for user_id {user_id if user_id else 'unknown'}: {e}",
             exc_info=True)
-        return jsonify({'error': 'An internal server error occurred.'}), 500
+        raise InternalServerException("Internal server error")
 
 
 @jwt_required()
@@ -136,26 +140,26 @@ def upload_paragraph_audio():
     try:
         user_id = get_jwt_identity()
         if not user_id:
-            logger.warning("Paragraph audio upload failed: JWT identity missing.")
-            return jsonify({"msg": "User not found or invalid token"}), 401
+            logger.error("Paragraph audio upload failed: JWT identity missing.")
+            raise MissingParameterException("User not found or invalid token")
 
         logger.info(f"Received request to upload paragraph audio for user_id: {user_id}.")
 
         if 'file' not in request.files:
-            logger.warning("Paragraph audio upload failed: 'file' part missing.")
-            return jsonify({'msg': 'No file part'}), 400
+            logger.error("Paragraph audio upload failed: 'file' part missing.")
+            raise MissingParameterException("Missing required fields: file")
 
         file = request.files['file']
         if file.filename == '':
-            logger.warning("Paragraph audio upload failed: No file selected.")
-            return jsonify({'msg': 'No selected file'}), 400
+            logger.error("Paragraph audio upload failed: No file selected.")
+            raise MissingParameterException("Missing required fields: file")
 
         original_filename = secure_filename(file.filename)  # Sanitize filename
         logger.debug(f"Received paragraph audio file: '{original_filename}' for user {user_id}")
 
         if not allowed_file(original_filename, ALLOWED_AUDIO_EXTENSIONS):
-            logger.warning(f"Paragraph audio upload failed: File type not allowed for '{original_filename}'.")
-            return jsonify({'msg': 'File type not allowed'}), 400
+            logger.error(f"Paragraph audio upload failed: File type not allowed for '{original_filename}'.")
+            raise BadRequestException(f"File type not allowed for filename '{original_filename}'.")
 
         unique_id = str(uuid.uuid4())
         public_id = f"paragraph_audio_previews/{user_id}/{unique_id}"
@@ -175,7 +179,7 @@ def upload_paragraph_audio():
         if not secure_url:
             logger.error(
                 f"Cloudinary upload failed for paragraph audio '{original_filename}', user {user_id}. No secure_url returned.")
-            return jsonify({'error': 'File upload failed processing.'}), 500
+            raise InternalServerException("Cloudinary upload failed")
 
         logger.info(
             f"Successfully uploaded paragraph audio '{original_filename}' for user {user_id}. URL: {secure_url}")
@@ -186,9 +190,9 @@ def upload_paragraph_audio():
         logger.error(
             f"Cloudinary API error during paragraph audio upload for user {user_id if user_id else 'unknown'}: {e}",
             exc_info=True)
-        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+        raise InternalServerException("Unexpected error during upload")
     except Exception as e:
         logger.error(
             f"Unexpected error during paragraph audio upload for user {user_id if user_id else 'unknown'}: {e}",
             exc_info=True)
-        return jsonify({'error': 'An internal server error occurred.'}), 500
+        raise InternalServerException("Unexpected error during upload")
