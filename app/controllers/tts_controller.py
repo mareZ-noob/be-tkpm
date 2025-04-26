@@ -1,13 +1,17 @@
+import logging
 import math
 import os
-import shutil
+import subprocess
 import threading
 from uuid import uuid4
-import subprocess
-import logging
 
-from flask import g, jsonify, request, send_file, current_app, after_this_request
-from app.utils.constant import ALL, EDGE_ENGINE, FEMALE, MALE, TIKTOK_ENGINE
+import cloudinary
+import cloudinary.uploader
+from flask import after_this_request, g, jsonify, request, send_file
+from flask_jwt_extended import get_jwt_identity, jwt_required
+
+from app.models import User
+from app.utils.constant import ALL, AUDIO_FOLDER, EDGE_ENGINE, FEMALE, MALE, TIKTOK_ENGINE
 from app.utils.voice.edge_voices import EDGE_FORMATTED_VOICES
 from app.utils.voice.tiktok_tts import TikTokTTS
 from app.utils.voice.tiktok_voices import TIKTOK_FORMATTED_VOICES
@@ -285,7 +289,7 @@ def generate_tts():
 
         # --- Edge TTS ---
         if engine == EDGE_ENGINE:
-            if speed == 1.0:
+            if math.isclose(speed, 1.0, rel_tol=1e-09, abs_tol=1e-09):
                 rate = "+0%"
             else:
                 percentage = int((speed - 1.0) * 100)
@@ -396,11 +400,8 @@ def generate_tts():
                 logger.error(f"Audio file expected but not found after TikTok processing: {filename}")
                 return jsonify({"msg": "Failed to generate or save initial audio file"}), 500
 
-            # --- NEW: Apply speed change using ffmpeg if speed is not 1.0 ---
-            if speed != 1.0:
-                # Create a temporary filename for the speed-adjusted audio
-                temp_speed_file = os.path.join(current_app.config.get('TEMP_FOLDER', os.getcwd()),
-                                               f"{base_filename}_speed_{speed}x.mp3")
+            if not math.isclose(speed, 1.0, rel_tol=1e-09, abs_tol=1e-09):
+                temp_speed_file = os.path.join(os.getcwd(), f"{base_filename}_speed_{speed}x.mp3")
                 g.tts_temp_speed_filename = temp_speed_file  # Store for cleanup
 
                 try:
@@ -421,12 +422,10 @@ def generate_tts():
                             try:
                                 os.remove(temp_speed_file)
                             except OSError:
-                                pass  # Ignore error if it was already gone
+                                pass
 
                 except RuntimeError as ffmpeg_err:
-                    # ffmpeg failed (not found, error, timeout)
                     logger.error(f"ffmpeg processing failed: {ffmpeg_err}. Sending original speed audio.")
-                    # Clean up the failed temp file if it exists
                     if temp_speed_file and os.path.exists(temp_speed_file):
                         try:
                             os.remove(temp_speed_file)
@@ -436,15 +435,12 @@ def generate_tts():
                     return send_file(filename, mimetype="audio/mp3", as_attachment=False)
                 except Exception as e:
                     logger.error(f"Unexpected error during speed adjustment post-processing: {e}", exc_info=True)
-                    # Clean up potential temp file
                     if temp_speed_file and os.path.exists(temp_speed_file):
                         try:
                             os.remove(temp_speed_file)
                         except OSError:
                             pass
-                    # Fallback to original file might be okay, or return server error
                     return jsonify({"msg": "Error during audio speed adjustment"}), 500
-
 
             if not os.path.exists(filename):
                 logger.error(f"Final audio file not found before sending: {filename}")
@@ -455,6 +451,7 @@ def generate_tts():
                 mimetype="audio/mp3",
                 as_attachment=False,
             )
+        raise ValueError(f"Unsupported engine: {engine}")
 
     except Exception as e:
         logger.error(f"Unhandled error in generate_tts: {str(e)}", exc_info=True)
@@ -473,3 +470,126 @@ def generate_tts():
             "msg": "An unexpected server error occurred during TTS generation.",
         }), 500
 
+
+def cleanup_files(files_to_delete):
+    for f_path in files_to_delete:
+        try:
+            if os.path.exists(f_path):
+                os.remove(f_path)
+                logger.info(f"Cleaned up temp file: {f_path}")
+        except OSError as e:
+            logger.error(f"Error cleaning up file {f_path}: {e}")
+
+
+@jwt_required()
+def concatenate_and_upload():
+    temp_files = []
+    output_filename = None
+    try:
+        files = request.files
+        if not files:
+            return jsonify({"msg": "No audio files provided"}), 400
+
+        file_paths_ordered = {}
+        for key in files:
+            if key.startswith("audio_part_"):
+                try:
+                    index = int(key.split("_")[-1])
+                    file = files[key]
+                    if file and file.filename:
+                        temp_filename = os.path.join(os.getcwd(), f"{uuid4()}.mp3")
+                        file.save(temp_filename)
+                        file_paths_ordered[index] = temp_filename
+                        temp_files.append(temp_filename)  # Add to list for cleanup
+                        logger.info(f"Saved part {index} to {temp_filename}")
+                    else:
+                        logger.warning(f"Skipping invalid file part: {key}")
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Could not parse index from key {key}: {e}")
+                    continue
+
+        if not file_paths_ordered:
+            return jsonify({"msg": "No valid audio parts received"}), 400
+
+        # Sort paths by index
+        sorted_paths = [path for idx, path in sorted(file_paths_ordered.items())]
+
+        if not sorted_paths:
+            return jsonify({"msg": "No audio files to process after sorting"}), 400
+
+        output_filename = os.path.join(os.getcwd(), f"final_{uuid4()}.mp3")
+        temp_files.append(output_filename)
+
+        # Create the concat file list for ffmpeg
+        concat_list_path = os.path.join(os.getcwd(), f"concat_list_{uuid4()}.txt")
+        temp_files.append(concat_list_path)
+        try:
+            with open(concat_list_path, 'w') as f:
+                for path in sorted_paths:
+                    # Need to escape special characters if paths might contain them
+                    # For simplicity here, assuming basic paths
+                    f.write(f"file '{os.path.abspath(path)}'\n")  # Use absolute paths
+
+            # Using the concat demuxer is safer than direct concat protocol
+            command = [
+                'ffmpeg',
+                '-f', 'concat',  # Use the concat demuxer
+                '-safe', '0',  # Allow relative paths in list if needed (though abspath is better)
+                '-i', concat_list_path,  # Input is the list file
+                '-c', 'copy',  # Copy codec, faster if formats match
+                '-y',  # Overwrite output if exists
+                output_filename
+            ]
+
+            logger.info(f"Running ffmpeg command: {' '.join(command)}")
+            result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)  # Add timeout
+            logger.info("ffmpeg concatenation successful.")
+            logger.debug(f"ffmpeg stdout: {result.stdout}")
+            logger.debug(f"ffmpeg stderr: {result.stderr}")
+
+        except FileNotFoundError:
+            logger.error("ffmpeg command not found. Is it installed and in PATH?")
+            return jsonify({"msg": "Audio processing tool (ffmpeg) not found on server"}), 500
+        except subprocess.CalledProcessError as e:
+            logger.error(f"ffmpeg concatenation failed with code {e.returncode}")
+            logger.error(f"ffmpeg stderr: {e.stderr}")
+            return jsonify({"msg": f"Audio concatenation failed: {e.stderr[:200]}"}), 500
+        except subprocess.TimeoutExpired:
+            logger.error("ffmpeg concatenation timed out.")
+            return jsonify({"msg": "Audio concatenation timed out"}), 500
+        except Exception as e:
+            logger.error(f"Error during ffmpeg list creation or execution: {e}", exc_info=True)
+            return jsonify({"msg": "An unexpected error occurred during audio concatenation"}), 500
+
+        if not os.path.exists(output_filename) or os.path.getsize(output_filename) == 0:
+            logger.error(f"Concatenated file not found or empty: {output_filename}")
+            return jsonify({"msg": "Failed to create final audio file"}), 500
+
+        logger.info(f"Uploading {output_filename} to Cloudinary...")
+        try:
+            unique_id = str(uuid4())
+            current_user = get_jwt_identity()
+            user = User.query.get(current_user)
+            public_id = f"{AUDIO_FOLDER}/{user.id}/{unique_id}"
+            upload_options = {
+                "resource_type": "video",
+                "public_id": public_id,
+                "overwrite": True,
+            }
+            upload_result = cloudinary.uploader.upload(output_filename, **upload_options)
+            logger.info("Upload to Cloudinary successful.")
+            logger.debug("Cloudinary upload result: %s", upload_result)
+
+            final_url = upload_result.get('secure_url')
+            if not final_url:
+                logger.error("Cloudinary upload result missing secure_url")
+                return jsonify({"msg": "Upload succeeded but failed to get URL"}), 500
+
+            return jsonify({"cloudinary_url": final_url}), 200
+
+        except Exception as e:
+            logger.error(f"Cloudinary upload failed: {e}", exc_info=True)
+            return jsonify({"msg": "Failed to upload final audio to storage"}), 500
+
+    finally:
+        cleanup_files(temp_files)

@@ -1,7 +1,8 @@
 ﻿from flask import jsonify, request
 from flask_jwt_extended import jwt_required
+
 from app.controllers.document_controller import create_document
-from app.crawl.crawler import get_wikipedia_summary, generate_youtube_script
+from app.crawl.crawler import generate_youtube_script, get_wikipedia_summary
 
 
 # @jwt_required()

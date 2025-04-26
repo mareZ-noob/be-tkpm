@@ -14,7 +14,7 @@ class VerificationToken(db.Model):
     __tablename__ = 'verification_tokens'
 
     id = db.Column(db.Integer, primary_key=True)
-    token = db.Column(db.String(256), nullable=False, unique=True)
+    token = db.Column(db.String(512), nullable=False, unique=True)
     user_id = db.Column(db.Integer, ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now(), default=func.now())

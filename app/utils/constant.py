@@ -12,8 +12,10 @@ CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
 CLOUDINARY_URL = os.getenv('CLOUDINARY_URL')
 AVATAR_FOLDER = os.getenv('AVATAR_FOLDER')
 VIDEO_FOLDER = os.getenv('VIDEO_FOLDER')
+AUDIO_FOLDER = os.getenv('AUDIO_FOLDER')
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi', 'mkv'}
+ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'wav', 'ogg'}
 
 ENDPOINTS = [
     "https://tiktok-tts.weilnet.workers.dev/api/generation",
@@ -47,3 +49,5 @@ CHUNK_SIZE = 3 * 1024 * 1024
 DOWNLOAD_RETRIES = 3
 DOWNLOAD_BACKOFF_FACTOR = 1
 DOWNLOAD_TIMEOUT = (10, 60)
+
+CASCADE_RULES = "all, delete-orphan"

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from flask import current_app, jsonify, request
+from flask import jsonify, request
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,

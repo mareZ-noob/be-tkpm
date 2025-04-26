@@ -11,6 +11,6 @@ def send_email_task(self, subject, recipients, body, html):
         return {'msg': 'success'}
     except Exception as exc:
         try:
-            self.retry(exc=exc, countdown=5 * 60)
+            self.retry(exc=exc, countdown=5 * 30)
         except self.MaxRetriesExceededError as e:
             return {'msg': 'failed', 'error': str(e)}

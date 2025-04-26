@@ -1,13 +1,14 @@
 import concurrent.futures
 import urllib.parse
+
 import google.generativeai as genai
-from googletrans import Translator
 import langdetect
 import requests
 import wikipedia
 import wikipediaapi
 from google import genai as genai_img
 from google.genai import types
+from googletrans import Translator
 
 # genai.configure(api_key="AIzaSyASeaYG6TS-aq64c-DCXD0_Aqg9D6sUU4o")
 # client = genai_img.Client(api_key="AIzaSyASeaYG6TS-aq64c-DCXD0_Aqg9D6sUU4o")

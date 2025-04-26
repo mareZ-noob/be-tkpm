@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.config.extensions import db
+from app.utils.constant import CASCADE_RULES
 
 
 class User(db.Model):
@@ -22,10 +23,12 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now(), default=func.now())
     is_active = db.Column(db.Boolean, default=True)
 
-    videos = relationship('Video', back_populates='user', cascade="all, delete-orphan")
-    documents = relationship('Document', back_populates='user', cascade="all, delete-orphan")
-    verification_tokens = relationship('VerificationToken', back_populates='user', cascade="all, delete-orphan")
-    reset_password_tokens = relationship('ResetPasswordToken', back_populates='user', cascade="all, delete-orphan")
+    videos = relationship('Video', back_populates='user', cascade=CASCADE_RULES)
+    documents = relationship('Document', back_populates='user', cascade=CASCADE_RULES)
+    verification_tokens = relationship('VerificationToken', back_populates='user', cascade=CASCADE_RULES)
+    reset_password_tokens = relationship('ResetPasswordToken', back_populates='user', cascade=CASCADE_RULES)
+    audios = relationship('Audio', back_populates='user', cascade=CASCADE_RULES)
+    youtube_uploads = relationship('YoutubeUpload', back_populates='user', cascade=CASCADE_RULES)
 
     def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None,
                  description=None):
