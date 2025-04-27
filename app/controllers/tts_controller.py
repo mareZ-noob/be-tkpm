@@ -528,7 +528,7 @@ def concatenate_and_upload():
                         temp_filename = os.path.join(os.getcwd(), f"{uuid4()}.mp3")
                         file.save(temp_filename)
                         file_paths_ordered[index] = temp_filename
-                        temp_files.append(temp_filename)  # Add to list for cleanup
+                        temp_files.append(temp_filename)
                         logger.info(f"Saved part {index} to {temp_filename}")
                     else:
                         logger.error(f"Skipping invalid file part: {key}")
