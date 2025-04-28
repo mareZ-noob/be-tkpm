@@ -1,4 +1,3 @@
-import logging
 import math
 import os
 import subprocess
@@ -77,11 +76,13 @@ except Exception as e:
     ALL_EDGE_VOICES_FLAT = []
 
 
+@jwt_required()
 def get_list_engines():
     logger.info(f"Getting list of available Edge voice engines: {EDGE_ENGINE}")
     return jsonify({"engines": [TIKTOK_ENGINE, EDGE_ENGINE]}), 200
 
 
+@jwt_required()
 def get_list_languages():
     data = request.get_json()
     if not data:
@@ -106,6 +107,7 @@ def get_list_languages():
     return jsonify({"languages": sorted(list(set(languages)))}), 200
 
 
+@jwt_required()
 def filter_voices():
     data = request.get_json()
     if not data:
@@ -259,6 +261,7 @@ def change_audio_speed(input_path: str, output_path: str, speed: float, ffmpeg_t
         raise InternalServerException("ffmpeg unexpected error")
 
 
+@jwt_required()
 def generate_tts():
     filename = None
     temp_speed_file = None  # Keep track of the temporary speed file

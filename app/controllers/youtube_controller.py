@@ -1,6 +1,8 @@
 import os
+import re
 import tempfile
 import uuid
+from urllib.parse import parse_qs, urlparse
 
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
@@ -8,9 +10,12 @@ import googleapiclient.discovery
 import googleapiclient.errors
 from celery.result import AsyncResult
 from flask import jsonify, redirect, request, session, url_for
+from flask_jwt_extended import jwt_required
 
 from app.config.celery_config import make_celery
+from app.config.extensions import db
 from app.config.logging_config import setup_logging
+from app.models import YoutubeUpload
 from app.tasks.youtube_tasks import upload_from_file_task, upload_from_url_task
 from app.utils.constant import API_SERVICE_NAME, API_VERSION, CLIENT_SECRETS_FILE, FRONTEND_URL, SCOPES
 from app.utils.exceptions import (
@@ -18,8 +23,8 @@ from app.utils.exceptions import (
     InternalServerException,
     InvalidCredentialsException,
     MissingParameterException,
-    ResourceNotFoundException,
 )
+from app.utils.jwt_helpers import get_user_id_from_jwt
 
 logger = setup_logging()
 
@@ -148,8 +153,15 @@ def logout_youtube():
     return jsonify({'msg': 'Logged out successfully'})
 
 
+@jwt_required()
 def upload_video():
     logger.info("Received request to upload video.")
+
+    user_id = get_user_id_from_jwt()
+    if user_id is None:
+        logger.error("Upload video request failed: User ID not found in JWT.")
+        raise ForbiddenException("User ID not found in token")
+
     if 'credentials' not in session:
         logger.error("Upload video request failed: No credentials found in session.")
         raise ForbiddenException("Not authenticated")
@@ -183,7 +195,7 @@ def upload_video():
             })
 
             task = upload_from_url_task.apply_async(
-                args=[credentials_dict, video_url, metadata]
+                args=[user_id, credentials_dict, video_url, metadata]
             )
 
         else:
@@ -210,7 +222,7 @@ def upload_video():
             temp_file_to_delete = temp_filename
 
             task = upload_from_file_task.apply_async(
-                args=[credentials_dict, temp_filename, metadata]
+                args=[user_id, credentials_dict, temp_filename, metadata]
             )
             temp_file_to_delete = None
 
@@ -236,6 +248,7 @@ def upload_video():
         raise InternalServerException("Failed to start upload task")
 
 
+@jwt_required()
 def check_upload_status(task_id):
     logger.debug(f"Checking status for upload task ID: {task_id}")
     celery_app = make_celery()
@@ -278,80 +291,136 @@ def check_upload_status(task_id):
     return jsonify(response)
 
 
+def extract_video_id_from_url(url):
+    if not url:
+        return None
+    try:
+        # Standard YouTube URLs (youtube.com/watch?v=..., youtube.com/embed/..., youtu.be/...)
+        parsed_url = urlparse(url)
+        if "youtube.com" in parsed_url.netloc:
+            if parsed_url.path == "/watch":
+                video_id = parse_qs(parsed_url.query).get("v")
+                if video_id:
+                    return video_id[0]
+            elif parsed_url.path.startswith("/embed/"):
+                return parsed_url.path.split("/embed/")[1].split("?")[0] # Get ID part
+        elif "youtu.be" in parsed_url.netloc:
+             return parsed_url.path[1:].split("?")[0] # Path is /ID
+
+        # Handle your specific format: https://www.youtube.com/watch?v={video_id}
+        if "googleusercontent.com" in parsed_url.netloc and parsed_url.path.startswith("/youtube.com/"):
+             # Attempt to extract the part after the last '/' assuming it's the ID
+             potential_id = parsed_url.path.split('/')[-1]
+             # A simple check might be len == 11 and alphanumeric/hyphen/underscore
+             if potential_id and re.match(r"^[a-zA-Z0-9_-]{11}$", potential_id):
+                  # If it starts with '0' as per your upload tasks, maybe strip it?
+                  # This depends on whether the '0' is part of the ID or just prefix.
+                  # Assuming '0' is a prefix you added and not part of the real ID:
+                  if potential_id.startswith('0') and len(potential_id) > 1:
+                       potential_id = potential_id[1:]
+                  # Re-validate length if you stripped '0'
+                  if re.match(r"^[a-zA-Z0-9_-]{11}$", potential_id):
+                      return potential_id
+                  else:
+                      logger.warning(f"Potential ID '{potential_id}' from {url} has incorrect format after stripping '0'.")
+                      return None
+             elif potential_id:
+                 logger.warning(f"Potential ID '{potential_id}' from {url} has incorrect format.")
+                 return None
+             else:
+                return None
+
+        logger.warning(f"Could not extract valid YouTube video ID from URL: {url}")
+        return None
+    except Exception as e:
+        logger.error(f"Error parsing URL {url}: {e}", exc_info=True)
+        return None
+
+
+@jwt_required()
 def get_video_stats():
-    logger.info("Attempting to fetch video statistics.")
+    logger.info("Attempting to fetch video statistics for user's DB entries.")
+
+    user_id = get_user_id_from_jwt()
+    if user_id is None:
+        logger.error("Upload video request failed: User ID not found in JWT.")
+        raise ForbiddenException("User ID not found in token")
+
     youtube = _get_youtube_client_from_session()
     if not youtube:
         if 'credentials' not in session:
-            logger.error("YouTube API request failed: No credentials found in session.")
+            logger.error(f"YouTube API request failed for user {user_id}: No credentials in session.")
             raise ForbiddenException("Not authenticated")
         else:
-            logger.error("YouTube API request failed: No credentials found in session.")
-            raise InvalidCredentialsException('Invalid credentials provided')
+            # Credentials might be present but invalid/expired and failed refresh
+            logger.error(
+                f"YouTube API request failed for user {user_id}: Could not build client from session credentials.")
+            # Optionally clear potentially bad credentials
+            # del session['credentials']
+            raise InvalidCredentialsException('Invalid or expired credentials provided')
+
+    video_ids_from_db = []
     try:
-        # Get channel ID (using 'mine=True')
-        channels_response = youtube.channels().list(
-            part='contentDetails',
-            mine=True
-        ).execute()
+        user_uploads = db.session.query(YoutubeUpload.url).filter(YoutubeUpload.user_id == user_id).all()
+        # Explicitly close session or rely on Flask-SQLAlchemy's request context management
+        # db.session.remove() # Or db.session.close() if needed outside request scope
 
-        if not channels_response.get('items'):
-            logger.error("Google API error: Could not find YouTube channel for this account")
-            raise ResourceNotFoundException('Could not find YouTube channel for this account')
+        if not user_uploads:
+            logger.info(f"No video uploads found in DB for user {user_id}.")
+            return jsonify({'success': True, 'videos': []})
 
-        # Get the ID of the uploads playlist
-        uploads_playlist_id = channels_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+        for upload in user_uploads:
+            video_id = extract_video_id_from_url(upload.url)
+            if video_id:
+                video_ids_from_db.append(video_id)
+            else:
+                logger.warning(f"Could not extract video ID from DB entry URL: {upload.url} for user {user_id}")
 
-        # Paginate through the uploads playlist to get video IDs
-        videos_data = []
-        next_page_token = None
-        while True:
-            playlist_items_response = youtube.playlistItems().list(
-                part='contentDetails',  # Only need videoId here
-                playlistId=uploads_playlist_id,
-                maxResults=50,  # Max allowed by API
-                pageToken=next_page_token
-            ).execute()
+        if not video_ids_from_db:
+            logger.info(f"No valid video IDs extracted from DB entries for user {user_id}.")
+            return jsonify({'success': True, 'videos': []})
 
-            video_ids = [
-                item['contentDetails']['videoId']
-                for item in playlist_items_response.get('items', [])
-                if item.get('contentDetails', {}).get('videoId')  # Ensure videoId exists
-            ]
+        logger.info(f"Found {len(video_ids_from_db)} video IDs in DB for user {user_id}.")
 
-            if not video_ids:
-                break
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving/parsing DB videos for user {user_id}: {e}", exc_info=True)
+        raise InternalServerException("An unexpected error occurred while processing video list.")
 
-            # Get details and statistics for the collected video IDs in batches
+    videos_data = []
+    chunk_size = 50
+
+    try:
+        for i in range(0, len(video_ids_from_db), chunk_size):
+            chunk_of_ids = video_ids_from_db[i:i + chunk_size]
+            ids_string = ','.join(chunk_of_ids)
+            logger.debug(f"Fetching stats for video ID chunk ({i // chunk_size + 1}): {ids_string}")
+
             video_details_response = youtube.videos().list(
-                part='snippet,statistics',  # Get title, thumbs, pubdate, and stats
-                id=','.join(video_ids)
+                part='snippet,statistics',
+                id=ids_string
             ).execute()
 
             for video in video_details_response.get('items', []):
                 snippet = video.get('snippet', {})
                 stats = video.get('statistics', {})
                 thumbnails = snippet.get('thumbnails', {})
-                default_thumbnail = thumbnails.get('default', {})  # Or 'medium', 'high'
+                # Choose desired thumbnail resolution (default, medium, high, standard, maxres)
+                thumbnail_url = thumbnails.get('medium', {}).get('url') or \
+                                thumbnails.get('default', {}).get('url')  # Fallback
 
                 video_data = {
                     'id': video['id'],
                     'title': snippet.get('title', 'N/A'),
                     'publishedAt': snippet.get('publishedAt'),
-                    'thumbnail': default_thumbnail.get('url'),
+                    'thumbnail': thumbnail_url,
                     'views': int(stats.get('viewCount', 0)),
                     'likes': int(stats.get('likeCount', 0)),
-                    # 'dislikes' are often hidden/unavailable now
-                    # 'dislikes': int(stats.get('dislikeCount', 0)),
                     'comments': int(stats.get('commentCount', 0))
+                    # Dislikes ('dislikeCount') are generally unavailable via API now
                 }
                 videos_data.append(video_data)
 
-            # Check for the next page of playlist items
-            next_page_token = playlist_items_response.get('nextPageToken')
-            if not next_page_token:
-                break
-
+        logger.info(f"Successfully fetched stats for {len(videos_data)} videos for user {user_id}.")
         return jsonify({
             'success': True,
             'videos': videos_data
@@ -360,11 +429,21 @@ def get_video_stats():
     except googleapiclient.errors.HttpError as e:
         error_content = e.content.decode('utf-8') if hasattr(e, 'content') else str(e)
         if e.resp.status == 401:
-            if 'credentials' in session: del session['credentials']
-            logger.error(f"YouTube API error: {error_content}")
-            raise ForbiddenException("Not authenticated")
-        logger.error(f"YouTube API error: {error_content}")
-        return jsonify({'error': f"An API error occurred: {error_content}"}), e.resp.status
+            if 'credentials' in session:
+                del session['credentials']
+            logger.error(f"YouTube API authentication error for user {user_id}: {error_content}", exc_info=True)
+            raise ForbiddenException("Authentication failed with YouTube. Please re-authenticate.")
+        elif e.resp.status == 403:
+            logger.error(f"YouTube API forbidden error for user {user_id}: {error_content}", exc_info=True)
+            raise ForbiddenException(f"YouTube API access denied (check quota or API permissions): {error_content}")
+        elif e.resp.status == 404:
+            logger.warning(f"YouTube API not found error for user {user_id} (IDs: {ids_string}): {error_content}")
+            raise InternalServerException(f"An API error occurred (Not Found): {error_content}")
+        else:
+            logger.error(f"YouTube API HTTP error for user {user_id} (Status: {e.resp.status}): {error_content}",
+                         exc_info=True)
+            raise InternalServerException(f"An API error occurred: {error_content}")
+
     except Exception as e:
-        logger.error(f"Unexpected error fetching video stats: {e}", exc_info=True)
-        raise InternalServerException(f'An unexpected error occurred: {str(e)}')
+        logger.error(f"Unexpected error fetching YouTube stats for user {user_id}: {e}", exc_info=True)
+        raise InternalServerException(f'An unexpected error occurred while fetching video statistics: {str(e)}')
