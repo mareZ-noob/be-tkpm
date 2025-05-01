@@ -2,6 +2,7 @@ from app.routes.agent_routes import agent_bp
 from app.routes.auth_routes import auth_bp
 from app.routes.create_routes import create_bp
 from app.routes.document_routes import doc_bp
+from app.routes.image_routes import image_bp
 from app.routes.test_routes import test_bp
 from app.routes.tts_routes import tts_bp
 from app.routes.upload_routes import upload_bp
@@ -21,3 +22,4 @@ def register_routes(app):
     app.register_blueprint(video_bp)
     app.register_blueprint(youtube_bp)
     app.register_blueprint(agent_bp)
+    app.register_blueprint(image_bp)

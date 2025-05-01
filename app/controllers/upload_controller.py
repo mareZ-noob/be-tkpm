@@ -1,4 +1,4 @@
-import uuid
+from uuid import uuid4
 
 import cloudinary
 import cloudinary.uploader
@@ -161,7 +161,7 @@ def upload_paragraph_audio():
             logger.error(f"Paragraph audio upload failed: File type not allowed for '{original_filename}'.")
             raise BadRequestException(f"File type not allowed for filename '{original_filename}'.")
 
-        unique_id = str(uuid.uuid4())
+        unique_id = str(uuid4())
         public_id = f"paragraph_audio_previews/{user_id}/{unique_id}"
 
         logger.info(

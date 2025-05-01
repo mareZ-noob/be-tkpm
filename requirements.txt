@@ -139,7 +139,7 @@ srt==3.5.3
 stack-data==0.6.3
 SudachiDict-core==20250129
 SudachiPy==0.6.10
-sympy==1.13.1
+sympy==1.13.3
 tabulate==0.9.0
 tiktoken==0.3.3
 tomli==2.2.1

@@ -14,6 +14,7 @@ CLOUDINARY_URL = os.getenv('CLOUDINARY_URL')
 AVATAR_FOLDER = os.getenv('AVATAR_FOLDER')
 VIDEO_FOLDER = os.getenv('VIDEO_FOLDER')
 AUDIO_FOLDER = os.getenv('AUDIO_FOLDER')
+IMAGE_FOLDER = os.getenv('IMAGE_FOLDER')
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi', 'mkv'}
 ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'wav', 'ogg'}

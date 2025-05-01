@@ -14,6 +14,8 @@ def make_celery(app_name=__name__):
         include=[
             'app.tasks.email_tasks',
             'app.tasks.upload_tasks',
+            'app.tasks.image_tasks',
+            'app.tasks.youtube_tasks',
         ]
     )
 

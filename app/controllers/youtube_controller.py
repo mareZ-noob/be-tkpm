@@ -1,8 +1,8 @@
 import os
 import re
 import tempfile
-import uuid
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
@@ -12,8 +12,7 @@ from celery.result import AsyncResult
 from flask import jsonify, redirect, request, session, url_for
 from flask_jwt_extended import jwt_required
 
-from app.config.celery_config import make_celery
-from app.config.extensions import db
+from app.config.extensions import celery, db
 from app.config.logging_config import setup_logging
 from app.models import YoutubeUpload
 from app.tasks.youtube_tasks import upload_from_file_task, upload_from_url_task
@@ -217,7 +216,7 @@ def upload_video():
 
             temp_dir = tempfile.gettempdir()
             temp_filename = os.path.join(temp_dir,
-                                         f"upload_{uuid.uuid4().hex}{os.path.splitext(video_file.filename)[1]}")
+                                         f"upload_{uuid4().hex}{os.path.splitext(video_file.filename)[1]}")
             video_file.save(temp_filename)
             temp_file_to_delete = temp_filename
 
@@ -251,8 +250,7 @@ def upload_video():
 @jwt_required()
 def check_upload_status(task_id):
     logger.debug(f"Checking status for upload task ID: {task_id}")
-    celery_app = make_celery()
-    task_result = AsyncResult(task_id, app=celery_app)
+    task_result = AsyncResult(task_id, app=celery)
 
     state = task_result.state
     # Info dictionary provided by task update_state
@@ -285,7 +283,7 @@ def check_upload_status(task_id):
     else:
         response['status'] = 'Unknown task state.'
         if info:
-            response['info'] = str(info)  # Include any info for debugging
+            response['info'] = str(info)
         logger.error(f"Task {task_id} has unexpected state: {state}. Info: {info}")
 
     return jsonify(response)

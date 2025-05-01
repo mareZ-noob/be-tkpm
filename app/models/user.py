@@ -29,6 +29,7 @@ class User(db.Model):
     reset_password_tokens = relationship('ResetPasswordToken', back_populates='user', cascade=CASCADE_RULES)
     audios = relationship('Audio', back_populates='user', cascade=CASCADE_RULES)
     youtube_uploads = relationship('YoutubeUpload', back_populates='user', cascade=CASCADE_RULES)
+    images = relationship('Image', back_populates='user', cascade=CASCADE_RULES)
 
     def __init__(self, username, email, password, first_name=None, last_name=None, date_of_birth=None,
                  description=None):

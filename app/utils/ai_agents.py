@@ -61,6 +61,7 @@ OPEN_ROUTER_MODELS = {
 
 FLAT_OPEN_ROUTER_MODELS = [model for sublist in OPEN_ROUTER_MODELS.values() for model in sublist]
 
+# (topic, word count, language, age range, audience description, style, tone)
 WIKIPEDIA_PROMPT_TEXT = """
     I have the content: %s.
     
@@ -103,6 +104,7 @@ WIKIPEDIA_PROMPT_TEXT = """
         - Optimize for YouTube audience retention
 """
 
+# (prompt, word count, language, age range, audience description, style, tone)
 PROMPT_TEXT = """
     The user has asked about: "%s"
 
@@ -145,5 +147,19 @@ PROMPT_TEXT = """
         - Optimize for YouTube audience retention
 """
 
+# (number of images, prompt, number of images)
 PROMPT_IMAGE = """
+    Analyze the following scientific text. Based on its content, key concepts, and narrative flow, generate a list of exactly %s distinct and visually descriptive prompts suitable for an image generation AI (like Stable Diffusion, Midjourney, or Pollinations). The prompts should cover different aspects mentioned in the text, from introduction to conclusion.
+    
+    Prioritize visual elements mentioned or implied in the text, such as key phenomena, objects, structures, processes, historical concepts/figures, or abstract ideas related to the scientific topic. Use styles like 'cinematic', 'hyperrealistic', 'abstract visualization', 'scientific illustration', 'dramatic lighting', 'microscopic view', 'astronomical illustration', 'conceptual art'.
+    
+    Format the output ONLY as a Python list of strings, like this:
+    ['prompt 1 description', 'prompt 2 description', ..., 'prompt N description']
+    
+    Text:
+    -------
+    %s
+    -------
+    
+    Generate the Python list of %s prompts now:
 """
