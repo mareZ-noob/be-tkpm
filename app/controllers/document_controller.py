@@ -1,9 +1,9 @@
 ﻿from flask import jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import jwt_required
 
 from app.config.extensions import db
 from app.config.logging_config import setup_logging
-from app.models import Document, User
+from app.models import Document
 from app.utils.exceptions import MissingParameterException, ResourceNotFoundException
 from app.utils.jwt_helpers import get_user_from_jwt, get_user_id_from_jwt
 

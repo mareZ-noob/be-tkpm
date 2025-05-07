@@ -1,6 +1,4 @@
 import ast
-import base64
-import io
 import os
 from uuid import uuid4
 
@@ -10,9 +8,9 @@ from openai import OpenAI
 
 from app.config.extensions import celery
 from app.config.logging_config import setup_logging
-from app.tasks.upload_tasks import process_image_upload
+from app.models import Image, User
 from app.utils.ai_agents import PROMPT_IMAGE
-from app.utils.constant import OPEN_ROUTER_API_KEY
+from app.utils.constant import IMAGE_FOLDER, OPEN_ROUTER_API_KEY
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -91,43 +89,49 @@ def process_image_generation(self, user_id, model, paragraph_id, content, num_im
 
             try:
                 image_url = model(img_prompt)
-                if image_url:
-                    if hasattr(image_url, 'save'):
-                        logger.info(f"[Task ID: {task_id}] Saving PIL image to {image_filename}")
-                        image_url.save(image_filename)
-
-                        with open(image_filename, 'rb') as f:
-                            file_data = f.read()
-
-                    elif isinstance(image_url, str):
-                        logger.info(f"[Task ID: {task_id}] Downloading image from URL to {image_filename}")
-                        img_response = requests.get(image_url, stream=True)
-                        img_response.raise_for_status()
-
-                        # Save the image to validate it's a proper image file
-                        with open(image_filename, 'wb') as f:
-                            for chunk in img_response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-
-                        # Read the validated image back for uploading
-                        with open(image_filename, 'rb') as f:
-                            file_data = f.read()
-                    else:
-                        logger.error(f"[Task ID: {task_id}] Invalid image URL format")
-                        results.append({
-                            'paragraph_id': paragraph_id,
-                            'response': img_prompt,
-                            'success': False,
-                            'error': 'Image generation failed or returned invalid URL'
-                        })
-                        continue
-                else:
-                    logger.error(f"[Task ID: {task_id}] No image URL generated")
+                if not image_url:
+                    logger.error(f"[Task ID: {task_id}] No image URL generated for prompt: {img_prompt}")
                     results.append({
                         'paragraph_id': paragraph_id,
                         'prompt': img_prompt,
                         'success': False,
-                        'error': 'Image generation failed or returned invalid URL'
+                        'error': 'Image generation failed or returned no URL'
+                    })
+                    continue
+
+                if hasattr(image_url, 'save'):
+                    logger.info(f"[Task ID: {task_id}] Saving PIL image to {image_filename}")
+                    image_url.save(image_filename)
+                    with open(image_filename, 'rb') as f:
+                        file_data = f.read()
+                elif isinstance(image_url, str):
+                    logger.info(f"[Task ID: {task_id}] Downloading image from URL: {image_url}")
+                    img_response = requests.get(image_url, timeout=10)
+                    img_response.raise_for_status()
+
+                    # Verify content type
+                    content_type = img_response.headers.get('content-type', '')
+                    if not content_type.startswith('image/'):
+                        logger.error(f"[Task ID: {task_id}] Invalid content type: {content_type}")
+                        results.append({
+                            'paragraph_id': paragraph_id,
+                            'prompt': img_prompt,
+                            'success': False,
+                            'error': 'Downloaded content is not an image'
+                        })
+                        continue
+
+                    file_data = img_response.content
+                    # Save temporarily to validate
+                    with open(image_filename, 'wb') as f:
+                        f.write(file_data)
+                else:
+                    logger.error(f"[Task ID: {task_id}] Invalid image URL format: {type(image_url)}")
+                    results.append({
+                        'paragraph_id': paragraph_id,
+                        'prompt': img_prompt,
+                        'success': False,
+                        'error': 'Invalid image URL format'
                     })
                     continue
 
@@ -136,48 +140,56 @@ def process_image_generation(self, user_id, model, paragraph_id, content, num_im
                     logger.error(f"[Task ID: {task_id}] Image data appears to be empty or too small")
                     results.append({
                         'paragraph_id': paragraph_id,
-                        'response': img_prompt,
+                        'prompt': img_prompt,
                         'success': False,
                         'error': 'Generated image data is invalid or corrupted'
                     })
                     continue
 
-                # Upload to Cloudinary
+                # Upload to Cloudinary - Fix: Process upload directly instead of using apply_async
                 logger.info(f"[Task ID: {task_id}] Uploading image {i + 1} to Cloudinary")
                 try:
-                    # Use file data directly
-                    upload_task = process_image_upload.apply_async(
-                        args=[user_id, file_data, os.path.basename(image_filename)]
-                    )
+                    # Process the upload directly
+                    uploaded_result = process_image_upload_directly(user_id, file_data, image_filename)
 
-                    # Store task ID in results
-                    results.append({
-                        'paragraph_id': paragraph_id,
-                        'response': img_prompt,
-                        'success': True,
-                        'upload_task_id': upload_task.id
-                    })
-
+                    if uploaded_result.get('success'):
+                        results.append({
+                            'paragraph_id': paragraph_id,
+                            'prompt': img_prompt,
+                            'success': True,
+                            'url': uploaded_result.get('url'),
+                            'image_id': uploaded_result.get('id')
+                        })
+                    else:
+                        results.append({
+                            'paragraph_id': paragraph_id,
+                            'prompt': img_prompt,
+                            'success': False,
+                            'error': uploaded_result.get('error', 'Unknown upload error')
+                        })
                 except Exception as upload_error:
-                    logger.error(f"[Task ID: {task_id}] Failed to initiate upload task: {upload_error}", exc_info=True)
+                    logger.error(f"[Task ID: {task_id}] Failed to upload image: {upload_error}", exc_info=True)
                     results.append({
                         'paragraph_id': paragraph_id,
-                        'response': img_prompt,
+                        'prompt': img_prompt,
                         'success': False,
-                        'error': f'Failed to initiate upload: {str(upload_error)}'
+                        'error': f'Failed to upload: {str(upload_error)}'
                     })
 
             except Exception as e:
                 logger.error(f"[Task ID: {task_id}] Error processing image {i + 1}: {e}", exc_info=True)
                 results.append({
                     'paragraph_id': paragraph_id,
-                    'response': img_prompt,
+                    'prompt': img_prompt,
                     'success': False,
                     'error': str(e)
                 })
             finally:
                 if os.path.exists(image_filename):
-                    os.remove(image_filename)
+                    try:
+                        os.remove(image_filename)
+                    except Exception as e:
+                        logger.warning(f"[Task ID: {task_id}] Failed to remove temporary file {image_filename}: {e}")
 
         logger.info(f"[Task ID: {task_id}] Image generation completed with {len(results)} results")
         return {
@@ -196,3 +208,79 @@ def process_image_generation(self, user_id, model, paragraph_id, content, num_im
 
     finally:
         logger.info(f"[Task ID: {task_id}] Task completed")
+
+
+def process_image_upload_directly(user_id, file_data, filename="uploaded_image"):
+    import os
+    from uuid import uuid4
+
+    import cloudinary.uploader
+    from PIL import Image as PILImage
+
+    from app.config.extensions import db
+
+    logger.info(f"Starting direct image upload for user_id: {user_id}, filename: {filename}")
+    public_id = None
+    temp_filename = None
+
+    try:
+        temp_filename = f"temp_image_{uuid4()}.png"
+        with open(temp_filename, 'wb') as f:
+            f.write(file_data)
+
+        try:
+            with PILImage.open(temp_filename) as img:
+                logger.info(f"Image validated: {img.format} {img.size}")
+                if img.format not in ('JPEG', 'PNG', 'GIF', 'WEBP'):
+                    img.save(temp_filename)
+                    with open(temp_filename, 'rb') as f:
+                        file_data = f.read()
+        except Exception as img_error:
+            logger.error(f"Image validation failed: {img_error}", exc_info=True)
+            return {'success': False, 'error': f"Invalid image data: {str(img_error)}"}
+
+        unique_id = str(uuid4())
+        public_id = f"{IMAGE_FOLDER}/{user_id}/{unique_id}"
+
+        logger.info(
+            f"Attempting to upload image '{filename}' for user {user_id} to Cloudinary (public_id: {public_id}).")
+        upload_result = cloudinary.uploader.upload(
+            file_data,
+            resource_type="image",
+            public_id=public_id,
+            overwrite=True,
+            format="png"
+        )
+        secure_url = upload_result['secure_url']
+        logger.info(f"Successfully uploaded image '{filename}' for user {user_id}. Cloudinary URL: {secure_url}")
+
+        logger.info(f"Attempting to save image record for user {user_id} to the database.")
+        user = User.query.get(user_id)
+        if not user:
+            logger.error(f"User not found in database for user_id: {user_id} while saving image record.")
+            return {'success': False, 'error': f"User not found for user_id: {user_id}"}
+
+        new_image = Image(
+            user_id=user_id,
+            url=secure_url
+        )
+        db.session.add(new_image)
+        db.session.commit()
+
+        logger.info(f"Successfully saved image record for user {user_id} to the database.")
+        logger.info(f"Image upload completed successfully for user_id: {user_id}.")
+        return {'success': True, 'url': secure_url, 'public_id': public_id, 'id': new_image.id}
+
+    except Exception as exc:
+        logger.error(
+            f"Exception occurred during direct image upload for user {user_id}, filename: {filename}. Error: {exc}",
+            exc_info=True)
+        return {'success': False, 'error': str(exc)}
+
+    finally:
+        if temp_filename and os.path.exists(temp_filename):
+            try:
+                os.remove(temp_filename)
+                logger.debug(f"Removed temporary file: {temp_filename}")
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary file: {temp_filename}. Error: {e}")

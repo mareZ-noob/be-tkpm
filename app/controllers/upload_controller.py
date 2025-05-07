@@ -16,13 +16,9 @@ from app.utils.exceptions import (
     MissingParameterException,
     ResourceNotFoundException,
 )
+from app.utils.function_helpers import allowed_file
 
 logger = setup_logging()
-
-
-def allowed_file(filename, allowed_extensions):
-    return '.' in filename and \
-        filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 
 @jwt_required()

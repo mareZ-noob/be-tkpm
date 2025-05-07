@@ -163,3 +163,8 @@ PROMPT_IMAGE = """
     
     Generate the Python list of %s prompts now:
 """
+
+# (text)
+PROMPT_CORRECT_TEXT = """Correct spelling errors in the text below. Return *only* the corrected text and absolutely nothing else, not even quotation marks around the text unless they were in the original: %s.
+Return only the corrected text, no explanations or additional information. If the text has period at the end of the sentence, please keep it. Otherwise, do not add period at the end of the sentence.
+"""

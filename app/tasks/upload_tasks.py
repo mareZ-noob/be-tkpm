@@ -39,14 +39,14 @@ def process_avatar_upload(self, user_id, file_data):
             f"[Task ID: {task_id}] Successfully uploaded avatar for user {user_id}. Cloudinary URL: {secure_url}")
 
         logger.info(f"[Task ID: {task_id}] Attempting to update avatar URL for user {user_id} in the database.")
-        with db.session.begin():
-            user = User.query.get(user_id)
-            if not user:
-                logger.error(f"[Task ID: {task_id}] User not found in database for user_id: {user_id}")
-                return {'success': False, 'error': f"User not found for user_id: {user_id}"}
 
-            user.avatar = secure_url
-            db.session.commit()
+        user = User.query.get(user_id)
+        if not user:
+            logger.error(f"[Task ID: {task_id}] User not found in database for user_id: {user_id}")
+            return {'success': False, 'error': f"User not found for user_id: {user_id}"}
+
+        user.avatar = secure_url
+        db.session.commit()
 
         logger.info(f"[Task ID: {task_id}] Successfully updated avatar URL for user {user_id} in the database.")
         logger.info(f"[Task ID: {task_id}] Avatar upload task completed successfully for user_id: {user_id}.")
@@ -93,14 +93,13 @@ def process_video_upload(self, user_id, file_data, filename, title=None):
         video_title = title or filename
         logger.info(
             f"[Task ID: {task_id}] Attempting to add video record for user {user_id} (Title: '{video_title}') to the database.")
-        with db.session.begin():
-            video = Video(
-                user_id=user_id,
-                url=secure_url,
-                title=video_title
-            )
-            db.session.add(video)
-            db.session.commit()
+        video = Video(
+            user_id=user_id,
+            url=secure_url,
+            title=video_title
+        )
+        db.session.add(video)
+        db.session.commit()
 
         logger.info(f"[Task ID: {task_id}] Successfully added video record for user {user_id} to the database.")
         logger.info(
@@ -148,14 +147,13 @@ def process_audio_upload(self, user_id, file_data, filename):
 
         logger.info(
             f"[Task ID: {task_id}] Attempting to add audio record for user {user_id} (Title: '{filename}') to the database.")
-        with db.session.begin():
-            audio = Audio(
-                user_id=user_id,
-                url=secure_url,
-                title=filename
-            )
-            db.session.add(audio)
-            db.session.commit()
+        audio = Audio(
+            user_id=user_id,
+            url=secure_url,
+            title=filename
+        )
+        db.session.add(audio)
+        db.session.commit()
 
         logger.info(f"[Task ID: {task_id}] Successfully added audio record for user {user_id} to the database.")
         logger.info(
@@ -197,8 +195,8 @@ def process_image_upload(self, user_id, file_data, filename="uploaded_image"):
                 logger.info(f"[Task ID: {task_id}] Image validated: {img.format} {img.size}")
                 if img.format not in ('JPEG', 'PNG', 'GIF', 'WEBP'):
                     logger.info(f"[Task ID: {task_id}] Converting image to PNG format")
-                    img = img.convert('RGBA')
-                    img.save(temp_filename, format='PNG')
+                    # img = img.convert('RGBA')
+                    img.save(temp_filename)
                     with open(temp_filename, 'rb') as f:
                         file_data = f.read()
         except Exception as img_error:
@@ -222,25 +220,25 @@ def process_image_upload(self, user_id, file_data, filename="uploaded_image"):
             f"[Task ID: {task_id}] Successfully uploaded image '{filename}' for user {user_id}. Cloudinary URL: {secure_url}")
 
         logger.info(f"[Task ID: {task_id}] Attempting to save image record for user {user_id} to the database.")
-        with db.session.begin():
-            user = User.query.get(user_id)
-            if not user:
-                logger.error(
-                    f"[Task ID: {task_id}] User not found in database for user_id: {user_id} while saving image record.")
-                return {'success': False, 'error': f"User not found for user_id: {user_id}"}
+        user = User.query.get(user_id)
+        if not user:
+            logger.error(
+                f"[Task ID: {task_id}] User not found in database for user_id: {user_id} while saving image record.")
+            return {'success': False, 'error': f"User not found for user_id: {user_id}"}
 
-            new_image = Image(
-                user_id=user_id,
-                url=secure_url
-            )
-            db.session.add(new_image)
-            db.session.commit()
+        new_image = Image(
+            user_id=user_id,
+            url=secure_url
+        )
+        db.session.add(new_image)
+        db.session.commit()
 
         logger.info(f"[Task ID: {task_id}] Successfully saved image record for user {user_id} to the database.")
 
         logger.info(f"[Task ID: {task_id}] Image upload task completed successfully for user_id: {user_id}.")
         return {'success': True, 'url': secure_url, 'public_id': public_id, 'id': new_image.id}
     except Exception as exc:
+        db.session.rollback()
         logger.error(
             f"[Task ID: {task_id}] Exception occurred during image upload for user {user_id}, filename: {filename}. Error: {exc}",
             exc_info=True)
@@ -276,3 +274,76 @@ def process_image_upload(self, user_id, file_data, filename="uploaded_image"):
                 logger.debug(f"[Task ID: {task_id}] Removed temporary file: {temp_filename}")
             except Exception as e:
                 logger.warning(f"[Task ID: {task_id}] Failed to remove temporary file: {temp_filename}. Error: {e}")
+
+
+def upload_image_directly(user_id, file_data, filename="uploaded_image"):
+    logger.info(f"Starting direct synchronous image upload (in-memory) for user_id: {user_id}, filename: {filename}")
+    public_id = None
+
+    try:
+        if not file_data:
+            logger.warning(f"Direct Upload: Empty file data received for {filename} (User: {user_id})")
+            return {'success': False, 'filename': filename, 'error': 'Empty file data received.'}
+
+        unique_id = str(uuid4())
+        public_id = f"{IMAGE_FOLDER}/{user_id}/{unique_id}"
+
+        logger.info(f"Direct Upload: Attempting to upload image '{filename}' for user {user_id} to Cloudinary (public_id: {public_id}).")
+
+        upload_result = cloudinary.uploader.upload(
+            file_data,
+            resource_type="image",
+            public_id=public_id,
+            overwrite=True,
+            format="png"
+        )
+        secure_url = upload_result.get('secure_url')
+        generated_public_id = upload_result.get('public_id')
+
+        if not secure_url or not generated_public_id:
+            logger.error(
+                f"Direct Upload: Cloudinary upload failed for {filename} (User: {user_id}) - Missing URL or public_id in response: {upload_result}")
+            return {'success': False, 'filename': filename, 'error': 'Cloudinary upload failed (invalid response).'}
+
+        logger.info(
+            f"Direct Upload: Successfully uploaded image '{filename}' for user {user_id}. Cloudinary URL: {secure_url}")
+
+        logger.info(f"Direct Upload: Attempting to save image record for user {user_id} to the database.")
+
+        user = User.query.get(user_id)
+        if not user:
+            logger.error(
+                f"Direct Upload: User not found in database (ID: {user_id}) while saving image record for {filename}.")
+            try:
+                logger.warning(
+                    f"Direct Upload: Deleting orphaned Cloudinary image {generated_public_id} because user {user_id} not found.")
+                # cloudinary.uploader.destroy(generated_public_id, resource_type="image")
+            except Exception as cleanup_exc:
+                logger.error(
+                    f"Direct Upload: Failed to delete orphaned Cloudinary image {generated_public_id}: {cleanup_exc}")
+            return {'success': False, 'filename': filename, 'error': f"User not found for user_id: {user_id}"}
+
+        new_image = Image(
+            user_id=user_id,
+            url=secure_url,
+        )
+        db.session.add(new_image)
+        db.session.commit()
+
+        logger.info(
+            f"Direct Upload: Successfully saved image record (ID: {new_image.id}) for user {user_id} to the database.")
+
+        return {'success': True, 'filename': filename, 'url': secure_url, 'image_id': new_image.id}
+
+    except cloudinary.exceptions.Error as cloud_error:
+        db.session.rollback()
+        logger.error(
+            f"Direct Upload: Cloudinary API error for {filename} (User: {user_id}, Public ID attempted: {public_id}): {cloud_error}",
+            exc_info=True)
+        return {'success': False, 'filename': filename, 'error': f"Cloudinary upload error: {str(cloud_error)}"}
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(
+            f"Direct Upload: Exception occurred during image upload for user {user_id}, filename: {filename}. Error: {exc}",
+            exc_info=True)
+        return {'success': False, 'filename': filename, 'error': f"An unexpected error occurred: {str(exc)}"}

@@ -301,31 +301,32 @@ def extract_video_id_from_url(url):
                 if video_id:
                     return video_id[0]
             elif parsed_url.path.startswith("/embed/"):
-                return parsed_url.path.split("/embed/")[1].split("?")[0] # Get ID part
+                return parsed_url.path.split("/embed/")[1].split("?")[0]  # Get ID part
         elif "youtu.be" in parsed_url.netloc:
-             return parsed_url.path[1:].split("?")[0] # Path is /ID
+            return parsed_url.path[1:].split("?")[0]  # Path is /ID
 
         # Handle your specific format: https://www.youtube.com/watch?v={video_id}
         if "googleusercontent.com" in parsed_url.netloc and parsed_url.path.startswith("/youtube.com/"):
-             # Attempt to extract the part after the last '/' assuming it's the ID
-             potential_id = parsed_url.path.split('/')[-1]
-             # A simple check might be len == 11 and alphanumeric/hyphen/underscore
-             if potential_id and re.match(r"^[a-zA-Z0-9_-]{11}$", potential_id):
-                  # If it starts with '0' as per your upload tasks, maybe strip it?
-                  # This depends on whether the '0' is part of the ID or just prefix.
-                  # Assuming '0' is a prefix you added and not part of the real ID:
-                  if potential_id.startswith('0') and len(potential_id) > 1:
-                       potential_id = potential_id[1:]
-                  # Re-validate length if you stripped '0'
-                  if re.match(r"^[a-zA-Z0-9_-]{11}$", potential_id):
-                      return potential_id
-                  else:
-                      logger.warning(f"Potential ID '{potential_id}' from {url} has incorrect format after stripping '0'.")
-                      return None
-             elif potential_id:
-                 logger.warning(f"Potential ID '{potential_id}' from {url} has incorrect format.")
-                 return None
-             else:
+            # Attempt to extract the part after the last '/' assuming it's the ID
+            potential_id = parsed_url.path.split('/')[-1]
+            # A simple check might be len == 11 and alphanumeric/hyphen/underscore
+            if potential_id and re.match(r"^[a-zA-Z0-9_-]{11}$", potential_id):
+                # If it starts with '0' as per your upload tasks, maybe strip it?
+                # This depends on whether the '0' is part of the ID or just prefix.
+                # Assuming '0' is a prefix you added and not part of the real ID:
+                if potential_id.startswith('0') and len(potential_id) > 1:
+                    potential_id = potential_id[1:]
+                # Re-validate length if you stripped '0'
+                if re.match(r"^[a-zA-Z0-9_-]{11}$", potential_id):
+                    return potential_id
+                else:
+                    logger.warning(
+                        f"Potential ID '{potential_id}' from {url} has incorrect format after stripping '0'.")
+                    return None
+            elif potential_id:
+                logger.warning(f"Potential ID '{potential_id}' from {url} has incorrect format.")
+                return None
+            else:
                 return None
 
         logger.warning(f"Could not extract valid YouTube video ID from URL: {url}")

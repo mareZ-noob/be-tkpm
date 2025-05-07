@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask
 
-from app.config.extensions import celery, cors, db, jwt, limiter, mail, migrate
+from app.config.extensions import celery, cors, db, jwt, limiter, mail, migrate, session, socketio
 from app.config.settings import config
 from app.routes import register_routes
 from app.utils.error_handlers import register_error_handlers
@@ -66,5 +66,7 @@ def create_app(config_name=None):
 
     # Allow for CORS requests from the frontend server
     cors.init_app(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+    socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
 
     return app

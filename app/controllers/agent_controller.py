@@ -1,9 +1,3 @@
-import re
-
-import langdetect
-import requests
-import wikipedia
-import wikipediaapi
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required
 from openai import OpenAI
@@ -17,6 +11,7 @@ from app.utils.exceptions import (
     ResourceNotFoundException,
     ServiceUnavailableException,
 )
+from app.utils.function_helpers import detect_language, get_wikipedia_content, standardize_text, translate_text
 
 logger = setup_logging()
 
@@ -24,71 +19,6 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPEN_ROUTER_API_KEY,
 )
-
-
-def standardize_text(text):
-    text = text.replace("*", " ")
-    text = text.replace("#", " ")
-    text = re.sub(r"\[.*\]", "", text)
-    text = re.sub(r"\(.*\)", "", text)
-    return text
-
-
-def detect_language(text):
-    try:
-        return langdetect.detect(text)
-    except Exception as e:
-        logger.error(f"Language detection error: {e}", exc_info=True)
-        return 'en'
-
-
-def translate_text(text, source_lang=None):
-    try:
-        # Use the Google Translate API
-        url = "https://translate.googleapis.com/translate_a/single"
-
-        params = {
-            "client": "gtx",
-            "sl": source_lang if source_lang else "auto",
-            "tl": "en",
-            "dt": "t",
-            "q": text
-        }
-
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            result = response.json()
-            translated_text = ''.join([sentence[0] for sentence in result[0] if sentence[0]])
-            return translated_text
-        else:
-            logger.error(f"Translation request failed with status code {response.status_code}")
-            return text
-    except Exception as e:
-        logger.error(f"Translation error: {e}", exc_info=True)
-        return text
-
-
-def get_wikipedia_content(keyword):
-    wiki_en = wikipediaapi.Wikipedia(
-        user_agent="MyWikipediaCrawler/1.0 (contact@example.com)",
-        language="en"
-    )
-
-    page = wiki_en.page(keyword)
-
-    if not page.exists():
-        try:
-            suggestions = wikipedia.search(keyword, results=5)
-            if suggestions:
-                return "Article not found.\n Did you mean:\n- " + "\n- ".join(suggestions)
-            else:
-                return None
-        except Exception as e:
-            logger.error(f"Wikipedia search error: {e}", exc_info=True)
-            return None
-    else:
-        return page.text
-
 
 def generate_youtube_content(text, is_wikipedia_query=True, output_language="English",
                              age_range="13-25", style="casual", word_count=1000,
@@ -267,6 +197,9 @@ def generate_script(data):
             tone=tone,
             model=model,
         )
+        if script is None:
+            logger.error("Script generation failed: No content returned.")
+            raise ServiceUnavailableException("Script generation failed: No content returned.")
         return script
     except Exception as e:
         logger.error(f"Error in generating YouTube script: {e}", exc_info=True)

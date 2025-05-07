@@ -11,7 +11,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.config.logging_config import setup_logging
 from app.models import User
-from app.utils.constant import ALL, AUDIO_FOLDER, EDGE_ENGINE, FEMALE, MALE, TIKTOK_ENGINE
+from app.utils.constant import ALL, AUDIO_FOLDER, EDGE_ENGINE, FEMALE, MALE, SRT_FOLDER, TIKTOK_ENGINE
 from app.utils.exceptions import (
     BadRequestException,
     InternalServerException,
@@ -20,9 +20,11 @@ from app.utils.exceptions import (
     ResourceNotFoundException,
     ServiceUnavailableException,
 )
+from app.utils.function_helpers import convert_audio_to_text
 from app.utils.voice.edge_voices import EDGE_FORMATTED_VOICES
 from app.utils.voice.tiktok_tts import TikTokTTS
 from app.utils.voice.tiktok_voices import TIKTOK_FORMATTED_VOICES
+from app.utils.whisper_support_language import whisper_support_language
 
 logger = setup_logging()
 
@@ -517,6 +519,8 @@ def concatenate_and_upload():
     output_filename = None
     try:
         files = request.files
+        language = request.form.get("language")
+        model = request.form.get("model")
         if not files:
             logger.error("Concatenate and upload failed: No files provided.")
             raise MissingParameterException("No audio files provided")
@@ -618,7 +622,42 @@ def concatenate_and_upload():
                 logger.error("Cloudinary upload result missing secure_url")
                 raise InternalServerException("Upload succeeded but failed to get URL")
 
-            return jsonify({"cloudinary_url": final_url}), 200
+            language_supported = True
+            if language not in whisper_support_language:
+                language_supported = False
+                logger.warning(f"Language '{language}' is not supported.")
+                logger.warning(f"Language '{language}' is not supported.")
+                return jsonify({
+                    "cloudinary_url": final_url,
+                    "language_supported": language_supported,
+                }), 200
+
+            srt_file_path, segments_json = convert_audio_to_text(
+                output_filename, language, model
+            )
+
+            srt_public_id = f"{SRT_FOLDER}/{user.id}/{unique_id}_srt"
+            srt_upload_options = {
+                "resource_type": "raw",
+                "public_id": srt_public_id,
+                "overwrite": True,
+            }
+            # srt_upload_result = cloudinary.uploader.upload(srt_file_path, **srt_upload_options)
+            # srt_url = srt_upload_result.get('secure_url')
+            # if not srt_url:
+            #     logger.error("Cloudinary SRT upload result missing secure_url")
+            #     return jsonify({
+            #         "cloudinary_url": final_url,
+            #         "language_supported": language_supported,
+            #     }), 200
+            temp_files.append(srt_file_path)
+
+            return jsonify({
+                "cloudinary_url": final_url,
+                "language_supported": language_supported,
+                "srt_url": "srt_url",
+                "srt_json": segments_json,
+            }), 200
 
         except Exception as e:
             logger.error(f"Cloudinary upload failed: {e}", exc_info=True)
