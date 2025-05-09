@@ -25,7 +25,6 @@ class User(db.Model):
 
     videos = relationship('Video', back_populates='user', cascade=CASCADE_RULES)
     documents = relationship('Document', back_populates='user', cascade=CASCADE_RULES)
-    verification_tokens = relationship('VerificationToken', back_populates='user', cascade=CASCADE_RULES)
     reset_password_tokens = relationship('ResetPasswordToken', back_populates='user', cascade=CASCADE_RULES)
     audios = relationship('Audio', back_populates='user', cascade=CASCADE_RULES)
     youtube_uploads = relationship('YoutubeUpload', back_populates='user', cascade=CASCADE_RULES)
