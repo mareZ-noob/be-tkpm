@@ -142,7 +142,8 @@ def convert_audio_to_text(file_path, language, model_name):
         if language not in whisper_support_language:
             logger.warning(f"Language '{language}' might not be optimally supported by Whisper.")
 
-        model = whisper.load_model("turbo")
+        # model = whisper.load_model("turbo")
+        model = whisper.load_model("base")
 
         logger.info(f"Loading audio file: {file_path}")
         audio = AudioSegment.from_file(file_path)
